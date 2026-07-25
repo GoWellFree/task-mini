@@ -13,10 +13,5 @@
     "build:backend": "npm --workspace backend run build",
     "typecheck:frontend": "npm --workspace frontend run typecheck",
     "typecheck:backend": "npm --workspace backend run typecheck"
-  },
-  "dependencies": {
-    "@supabase/server": "^1.4.1",
-    "@supabase/ssr": "^0.12.3",
-    "@supabase/supabase-js": "^2.110.8"
   }
 }
