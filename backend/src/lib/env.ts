@@ -11,6 +11,7 @@ function required(name: string): string {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   isProduction: process.env.NODE_ENV === "production",
+  isTest: process.env.NODE_ENV === "test",
   port: Number(process.env.PORT ?? 3000),
   // CORS allowlist: comma-separated origins (e.g. staging + production frontends).
   frontendUrls: (process.env.FRONTEND_URL ?? "http://localhost:5173")

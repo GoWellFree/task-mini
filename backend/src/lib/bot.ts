@@ -4,9 +4,10 @@ import { env } from "./env.js";
 import type { Task } from "../types/index.js";
 
 // In production Telegram delivers updates via webhook (registered in index.ts).
-// Locally, polling is simpler to set up.
+// Locally, polling is simpler to set up. Never poll during tests — it would
+// open a real long-lived connection to the Telegram API.
 export const bot = new TelegramBot(env.telegramBotToken, {
-  polling: !env.isProduction,
+  polling: !env.isProduction && !env.isTest,
 });
 
 /**
