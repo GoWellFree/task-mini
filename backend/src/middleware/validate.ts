@@ -1,5 +1,5 @@
 import type { NextFunction, Request, RequestHandler, Response } from "express";
-import type { ZodSchema } from "zod";
+import type { ZodSchema } from "@task-mini/shared";
 
 /**
  * Express 4 does not catch rejections from async handlers, so an unawaited
