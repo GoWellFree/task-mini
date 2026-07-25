@@ -7,6 +7,10 @@ export const ERROR_CODES = {
   ROUTE_NOT_FOUND: "ROUTE_NOT_FOUND",
   INTERNAL: "INTERNAL",
 
+  SESSION_INVALID: "SESSION_INVALID",
+  SESSION_EXPIRED: "SESSION_EXPIRED",
+  SESSION_REUSED: "SESSION_REUSED",
+
   USER_NOT_FOUND: "USER_NOT_FOUND",
   WORKSPACE_NOT_FOUND: "WORKSPACE_NOT_FOUND",
   WORKSPACE_ACCESS_DENIED: "WORKSPACE_ACCESS_DENIED",
@@ -36,6 +40,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   ROUTE_NOT_FOUND: "Маршрут не найден",
   INTERNAL: "Внутренняя ошибка сервера",
 
+  SESSION_INVALID: "Сессия недействительна. Войдите заново",
+  SESSION_EXPIRED: "Сессия истекла. Войдите заново",
+  SESSION_REUSED: "Сессия завершена по соображениям безопасности. Войдите заново",
+
   USER_NOT_FOUND: "Пользователь не найден",
   WORKSPACE_NOT_FOUND: "Группа не найдена",
   WORKSPACE_ACCESS_DENIED: "Вы не состоите в этой группе",
@@ -52,6 +60,10 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   RATE_LIMITED: 429,
   ROUTE_NOT_FOUND: 404,
   INTERNAL: 500,
+
+  SESSION_INVALID: 401,
+  SESSION_EXPIRED: 401,
+  SESSION_REUSED: 401,
 
   USER_NOT_FOUND: 404,
   WORKSPACE_NOT_FOUND: 404,

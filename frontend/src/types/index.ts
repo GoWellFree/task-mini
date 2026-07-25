@@ -1,5 +1,7 @@
 export type {
   ApiErrorBody,
+  AuthResponse,
+  AuthTokens,
   ErrorCode,
   PublicUser,
   Task,

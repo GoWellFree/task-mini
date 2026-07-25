@@ -48,5 +48,10 @@ export const telegramAuthSchema = z.object({
 });
 export type TelegramAuthInput = z.infer<typeof telegramAuthSchema>;
 
+export const refreshTokenSchema = z.object({
+  refreshToken: z.string().min(1, "Отсутствует refresh-токен"),
+});
+export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });

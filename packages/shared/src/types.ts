@@ -54,3 +54,27 @@ export interface AuthTokenPayload {
   userId: string;
   telegramId: number;
 }
+
+/** Issued on login and on every refresh. */
+export interface AuthTokens {
+  accessToken: string;
+  /** Opaque random string — not a JWT. Only its hash is stored server-side. */
+  refreshToken: string;
+  /** Access-token lifetime in seconds, so the client can refresh proactively. */
+  expiresIn: number;
+}
+
+export interface AuthResponse extends AuthTokens {
+  user: User;
+  startParam?: string;
+}
+
+export interface UserSession {
+  id: string;
+  user_id: string;
+  revoked_at: string | null;
+  expires_at: string;
+  created_at: string;
+  last_used_at: string | null;
+  user_agent: string | null;
+}

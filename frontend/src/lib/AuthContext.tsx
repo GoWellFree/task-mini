@@ -1,13 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, clearToken, setToken } from "./api";
+import { api, clearTokens, getRefreshToken, setOnSessionExpired, setTokens } from "./api";
 import { getInitData, getStartParam, isRunningInTelegram } from "./telegram";
-import type { User } from "../types";
-
-interface AuthResponse {
-  token: string;
-  user: User;
-  startParam?: string;
-}
+import type { AuthResponse, User } from "../types";
 
 interface AuthContextValue {
   user: User | null;
@@ -15,6 +9,7 @@ interface AuthContextValue {
   error: string | null;
   startParam: string | null;
   logout: () => void;
+  logoutEverywhere: () => void;
   retry: () => void;
 }
 
@@ -44,7 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const result = await api.post<AuthResponse>("/api/auth/telegram", initData ? { initData } : { dev: true });
 
         if (cancelled) return;
-        setToken(result.token);
+        setTokens(result);
         setUser(result.user);
         setStartParam(result.startParam ?? getStartParam() ?? null);
       } catch (err) {
@@ -61,14 +56,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [attempt]);
 
-  function logout() {
-    clearToken();
+  // A refresh failure means the session is gone server-side (expired, revoked,
+  // or reuse detected) — drop the user back to the login screen.
+  useEffect(() => {
+    setOnSessionExpired(() => {
+      setUser(null);
+      setError("Сессия истекла. Откройте приложение заново.");
+    });
+    return () => setOnSessionExpired(null);
+  }, []);
+
+  async function logout() {
+    const refreshToken = getRefreshToken();
+    // Best-effort server-side revocation; the local session goes either way.
+    if (refreshToken) {
+      await api.post("/api/auth/logout", { refreshToken }).catch(() => {});
+    }
+    clearTokens();
+    setUser(null);
+  }
+
+  async function logoutEverywhere() {
+    await api.post("/api/auth/logout-all").catch(() => {});
+    clearTokens();
     setUser(null);
   }
 
   return (
     <AuthContext.Provider
-      value={{ user, loading, error, startParam, logout, retry: () => setAttempt((a) => a + 1) }}
+      value={{
+        user,
+        loading,
+        error,
+        startParam,
+        logout,
+        logoutEverywhere,
+        retry: () => setAttempt((a) => a + 1),
+      }}
     >
       {children}
     </AuthContext.Provider>

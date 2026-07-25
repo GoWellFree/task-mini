@@ -47,7 +47,23 @@ Frontend в dev-режиме сам обнаружит, что запущен в
 (например, `ngrok http 5173`) и укажите публичный HTTPS-адрес в настройках Mini App
 в BotFather.
 
-## 3. Проверка типов и сборка
+## 3. Миграции БД
+
+Схема меняется только миграциями из `supabase/migrations/`. Для их применения нужен
+`DATABASE_URL` в `backend/.env` (Supabase → Project Settings → Database → Connection
+string → URI). Приложение этот URL не использует — он нужен только раннеру миграций.
+
+```bash
+npm run migrate:status    # что применено, что ожидает
+npm run migrate:dry-run   # показать план, ничего не менять
+npm run migrate           # применить все ожидающие миграции
+```
+
+Каждая миграция выполняется в транзакции и записывается в таблицу
+`schema_migrations`, поэтому повторный запуск безопасен. Файлы `*.down.sql` —
+это откаты; раннер их никогда не выполняет, откат делается осознанно и вручную.
+
+## 4. Проверка типов и сборка
 
 ```bash
 npm run typecheck:backend
@@ -56,7 +72,7 @@ npm run build:backend
 npm run build:frontend
 ```
 
-## 4. Production-развёртывание
+## 5. Production-развёртывание
 
 ### Frontend — Vercel
 1. Импортируйте папку `frontend/` как отдельный проект в Vercel.
