@@ -1,9 +1,12 @@
 import { Router } from "express";
+import { ERROR_CODES, telegramAuthSchema, type TelegramAuthInput } from "@task-mini/shared";
 import { env } from "../lib/env.js";
 import { supabase } from "../lib/supabase.js";
+import { ApiError } from "../lib/apiError.js";
 import { verifyTelegramInitData } from "../lib/telegramAuth.js";
 import { signAuthToken } from "../lib/jwt.js";
 import { requireAuth } from "../middleware/auth.js";
+import { asyncHandler, validateBody } from "../middleware/validate.js";
 import type { User } from "../types/index.js";
 
 export const authRouter = Router();
@@ -42,15 +45,17 @@ async function findOrCreateUser(input: {
     .single();
 
   if (error || !created) {
-    throw new Error(error?.message ?? "Не удалось создать пользователя");
+    throw error ?? new ApiError(ERROR_CODES.INTERNAL, { message: "Не удалось создать пользователя" });
   }
 
   return created as User;
 }
 
-authRouter.post("/telegram", async (req, res) => {
-  try {
-    const { initData, dev } = req.body as { initData?: string; dev?: boolean };
+authRouter.post(
+  "/telegram",
+  validateBody(telegramAuthSchema),
+  asyncHandler(async (req, res) => {
+    const { initData, dev } = req.body as TelegramAuthInput;
 
     // Dev auth path: only available when explicitly enabled and never in production.
     if (dev && env.enableDevAuth) {
@@ -66,11 +71,19 @@ authRouter.post("/telegram", async (req, res) => {
     }
 
     if (!initData) {
-      res.status(400).json({ error: "Отсутствуют данные initData" });
-      return;
+      throw new ApiError(ERROR_CODES.UNAUTHORIZED, { message: "Отсутствуют данные initData" });
     }
 
-    const parsed = verifyTelegramInitData(initData);
+    let parsed;
+    try {
+      parsed = verifyTelegramInitData(initData);
+    } catch (err) {
+      // Never surface the raw verification message — it distinguishes "bad
+      // signature" from "expired", which helps nobody but an attacker.
+      console.error(`[${req.requestId}] initData verification failed:`, err);
+      throw new ApiError(ERROR_CODES.UNAUTHORIZED, { message: "Не удалось подтвердить данные Telegram" });
+    }
+
     const user = await findOrCreateUser({
       telegram_id: parsed.user.id,
       username: parsed.user.username,
@@ -80,10 +93,8 @@ authRouter.post("/telegram", async (req, res) => {
 
     const token = signAuthToken({ userId: user.id, telegramId: user.telegram_id });
     res.json({ token, user, startParam: parsed.startParam });
-  } catch (err) {
-    res.status(401).json({ error: err instanceof Error ? err.message : "Ошибка авторизации" });
-  }
-});
+  }),
+);
 
 authRouter.get("/me", requireAuth, (req, res) => {
   res.json({ user: req.user });

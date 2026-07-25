@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import type { Task, TaskStatus } from "../types";
+import type { TaskStatus, TaskWithWorkspace } from "../types";
 
 export const STATUS_LABELS: Record<TaskStatus, string> = {
   todo: "К выполнению",
@@ -29,7 +29,7 @@ function formatDueDate(dueAt: string | null): { text: string; overdue: boolean }
   return { text, overdue };
 }
 
-export function TaskListItem({ task }: { task: Task }) {
+export function TaskListItem({ task }: { task: TaskWithWorkspace }) {
   const { text, overdue } = formatDueDate(task.due_at);
 
   return (

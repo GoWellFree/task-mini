@@ -24,11 +24,15 @@ jobs:
       - name: Install
         run: npm ci
 
-      - name: Lint (backend)
-        run: npm --workspace backend run lint
+      # Backend and frontend both consume @task-mini/shared's compiled output.
+      - name: Build shared
+        run: npm run build:shared
 
-      - name: Lint (frontend)
-        run: npm --workspace frontend run lint
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (shared)
+        run: npm run typecheck:shared
 
       - name: Typecheck (backend)
         run: npm run typecheck:backend
@@ -36,8 +40,8 @@ jobs:
       - name: Typecheck (frontend)
         run: npm run typecheck:frontend
 
-      - name: Unit tests (backend)
-        run: npm --workspace backend run test
+      - name: Unit tests
+        run: npm test
 
       - name: Build (backend)
         run: npm run build:backend

@@ -3,8 +3,10 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import type { Update } from "node-telegram-bot-api";
+import { ERROR_CODES, ERROR_MESSAGES, type ApiErrorBody } from "@task-mini/shared";
 import { env } from "./lib/env.js";
 import { bot, isValidWebhookSecret, registerBotCommands, shouldProcessUpdate } from "./lib/bot.js";
+import { errorHandler, notFoundHandler, requestId } from "./middleware/errorHandler.js";
 import { authRouter } from "./routes/auth.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { tasksRouter, workspaceTasksRouter } from "./routes/tasks.js";
@@ -15,6 +17,7 @@ const JSON_BODY_LIMIT = "200kb";
 const app = express();
 
 app.use(helmet());
+app.use(requestId);
 
 // CORS allowlist (FRONTEND_URL may be a comma-separated list of origins).
 app.use(
@@ -30,10 +33,16 @@ app.use(
 );
 
 // Abort requests that hang far longer than any of our handlers should take.
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setTimeout(REQUEST_TIMEOUT_MS, () => {
     if (!res.headersSent) {
-      res.status(503).json({ error: "Превышено время ожидания запроса" });
+      res.status(503).json({
+        error: {
+          code: ERROR_CODES.INTERNAL,
+          message: "Превышено время ожидания запроса",
+          requestId: req.requestId ?? "unknown",
+        },
+      } satisfies ApiErrorBody);
     }
   });
   next();
@@ -41,14 +50,36 @@ app.use((_req, res, next) => {
 
 app.use(express.json({ limit: JSON_BODY_LIMIT }));
 
+function rateLimitHandler(req: express.Request, res: express.Response): void {
+  res.status(429).json({
+    error: {
+      code: ERROR_CODES.RATE_LIMITED,
+      message: ERROR_MESSAGES.RATE_LIMITED,
+      requestId: req.requestId ?? "unknown",
+    },
+  } satisfies ApiErrorBody);
+}
+
 app.use(
   "/api",
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 300, standardHeaders: true, legacyHeaders: false }),
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+  }),
 );
 // Auth endpoints are the entry point for brute-forcing initData/dev-auth — limit them tighter.
 app.use(
   "/api/auth",
-  rateLimit({ windowMs: 15 * 60 * 1000, limit: 30, standardHeaders: true, legacyHeaders: false }),
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+  }),
 );
 
 app.get("/health", (_req, res) => {
@@ -83,12 +114,9 @@ if (env.isProduction) {
   });
 }
 
-// Generic error fallback so API errors always return understandable JSON.
-// Registered last so it can catch errors from every route above (including CORS rejections).
-app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
-  console.error(err);
-  res.status(500).json({ error: "Внутренняя ошибка сервера" });
-});
+// Registered last so they see errors from every route above (including CORS rejections).
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 app.listen(env.port, () => {
   console.log(`Task Mini backend listening on port ${env.port} (${env.nodeEnv})`);

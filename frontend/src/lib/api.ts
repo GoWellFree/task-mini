@@ -1,3 +1,5 @@
+import { ERROR_MESSAGES, type ApiErrorBody, type ErrorCode } from "@task-mini/shared";
+
 const API_URL = import.meta.env.VITE_API_URL as string;
 const TOKEN_KEY = "task_mini_token";
 
@@ -13,7 +15,19 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY);
 }
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  readonly code: ErrorCode | undefined;
+  readonly status: number;
+  readonly requestId: string | undefined;
+
+  constructor(message: string, options: { code?: ErrorCode; status: number; requestId?: string }) {
+    super(message);
+    this.name = "ApiError";
+    this.code = options.code;
+    this.status = options.status;
+    this.requestId = options.requestId;
+  }
+}
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const token = getToken();
@@ -23,16 +37,27 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  let response: Response;
+  try {
+    response = await fetch(`${API_URL}${path}`, { ...options, headers });
+  } catch {
+    // Network-level failure (offline, DNS, CORS): no HTTP status exists.
+    throw new ApiError("Нет связи с сервером. Проверьте подключение.", { status: 0 });
+  }
 
   if (response.status === 204) {
     return undefined as T;
   }
 
-  const body = await response.json().catch(() => ({}));
+  const body = (await response.json().catch(() => null)) as (ApiErrorBody & Record<string, unknown>) | null;
 
   if (!response.ok) {
-    throw new ApiError(body.error ?? "Что-то пошло не так. Попробуйте ещё раз.");
+    const details = body?.error;
+    throw new ApiError(details?.message ?? ERROR_MESSAGES.INTERNAL, {
+      code: details?.code,
+      status: response.status,
+      requestId: details?.requestId,
+    });
   }
 
   return body as T;

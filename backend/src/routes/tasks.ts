@@ -1,254 +1,188 @@
 import { Router } from "express";
+import {
+  ERROR_CODES,
+  createTaskSchema,
+  updateTaskSchema,
+  uuidParamSchema,
+  workspaceIdParamSchema,
+  type CreateTaskInput,
+  type UpdateTaskInput,
+} from "@task-mini/shared";
 import { supabase } from "../lib/supabase.js";
+import { ApiError } from "../lib/apiError.js";
 import { requireAuth } from "../middleware/auth.js";
+import { asyncHandler, validateBody, validateParams } from "../middleware/validate.js";
+import {
+  getTaskEditRights,
+  requireAssigneeIsMember,
+  requireMembership,
+  requireTaskManager,
+} from "../permissions/workspacePermissions.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
-import type { Task, TaskStatus, User, Workspace, WorkspaceMember } from "../types/index.js";
+import type { Task, User, Workspace } from "../types/index.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
-const VALID_STATUSES: TaskStatus[] = ["todo", "in_progress", "done"];
-
-async function getMembership(workspaceId: string, userId: string): Promise<WorkspaceMember | null> {
-  const { data } = await supabase
-    .from("workspace_members")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .eq("user_id", userId)
-    .maybeSingle();
-  return (data as WorkspaceMember) ?? null;
-}
-
-async function getTaskOr404(taskId: string): Promise<Task | null> {
+async function getTaskOrThrow(taskId: string): Promise<Task> {
   const { data } = await supabase.from("tasks").select("*").eq("id", taskId).maybeSingle();
-  return (data as Task) ?? null;
-}
-
-// Can view: any workspace member. Can edit/delete: task creator or workspace owner.
-// Assignee may only change status / mark done (checked separately in PATCH).
-async function canManageTask(task: Task, userId: string): Promise<boolean> {
-  if (task.creator_id === userId) return true;
-  const { data: workspace } = await supabase
-    .from("workspaces")
-    .select("owner_id")
-    .eq("id", task.workspace_id)
-    .single();
-  return (workspace as Pick<Workspace, "owner_id"> | null)?.owner_id === userId;
+  if (!data) {
+    throw new ApiError(ERROR_CODES.TASK_NOT_FOUND);
+  }
+  return data as Task;
 }
 
 // GET /api/tasks/my — tasks assigned to the current user, across all workspaces
-tasksRouter.get("/my", async (req, res) => {
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*, workspace:workspaces(name)")
-    .eq("assignee_id", req.user!.id)
-    .order("due_at", { ascending: true, nullsFirst: false });
+tasksRouter.get(
+  "/my",
+  asyncHandler(async (req, res) => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*, workspace:workspaces(name)")
+      .eq("assignee_id", req.user!.id)
+      .order("due_at", { ascending: true, nullsFirst: false });
 
-  if (error) {
-    res.status(500).json({ error: "Не удалось загрузить задачи" });
-    return;
-  }
+    if (error) throw error;
 
-  res.json({ tasks: data ?? [] });
-});
+    res.json({ tasks: data ?? [] });
+  }),
+);
 
 // GET /api/tasks/:id
-tasksRouter.get("/:id", async (req, res) => {
-  const task = await getTaskOr404(req.params.id);
-  if (!task) {
-    res.status(404).json({ error: "Задача не найдена" });
-    return;
-  }
-
-  if (!(await getMembership(task.workspace_id, req.user!.id))) {
-    res.status(403).json({ error: "Нет доступа к этой задаче" });
-    return;
-  }
-
-  res.json({ task });
-});
+tasksRouter.get(
+  "/:id",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    res.json({ task });
+  }),
+);
 
 // POST /api/tasks
-tasksRouter.post("/", async (req, res) => {
-  const { workspaceId, title, description, assigneeId, status, dueAt } = req.body as {
-    workspaceId?: string;
-    title?: string;
-    description?: string;
-    assigneeId?: string;
-    status?: TaskStatus;
-    dueAt?: string;
-  };
+tasksRouter.post(
+  "/",
+  validateBody(createTaskSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as CreateTaskInput;
 
-  if (!workspaceId || !title || !title.trim()) {
-    res.status(400).json({ error: "Укажите группу и название задачи" });
-    return;
-  }
+    await requireMembership(body.workspaceId, req.user!.id);
+    if (body.assigneeId) {
+      await requireAssigneeIsMember(body.workspaceId, body.assigneeId);
+    }
 
-  if (!(await getMembership(workspaceId, req.user!.id))) {
-    res.status(403).json({ error: "Вы не состоите в этой группе" });
-    return;
-  }
+    const { data: task, error } = await supabase
+      .from("tasks")
+      .insert({
+        workspace_id: body.workspaceId,
+        title: body.title,
+        description: body.description || null,
+        creator_id: req.user!.id,
+        assignee_id: body.assigneeId ?? null,
+        status: body.status ?? "todo",
+        due_at: body.dueAt ?? null,
+      })
+      .select("*")
+      .single();
 
-  if (assigneeId && !(await getMembership(workspaceId, assigneeId))) {
-    res.status(400).json({ error: "Исполнитель должен быть участником группы" });
-    return;
-  }
+    if (error || !task) throw error ?? new ApiError(ERROR_CODES.INTERNAL);
 
-  if (status && !VALID_STATUSES.includes(status)) {
-    res.status(400).json({ error: "Недопустимый статус" });
-    return;
-  }
+    await maybeNotifyAssignment(task as Task);
+    res.status(201).json({ task });
+  }),
+);
 
-  const { data: task, error } = await supabase
-    .from("tasks")
-    .insert({
-      workspace_id: workspaceId,
-      title: title.trim(),
-      description: description?.trim() || null,
-      creator_id: req.user!.id,
-      assignee_id: assigneeId ?? null,
-      status: status ?? "todo",
-      due_at: dueAt ?? null,
-    })
-    .select("*")
-    .single();
+// PATCH /api/tasks/:id
+tasksRouter.patch(
+  "/:id",
+  validateParams(uuidParamSchema),
+  validateBody(updateTaskSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    const body = req.body as UpdateTaskInput;
 
-  if (error || !task) {
-    res.status(500).json({ error: "Не удалось создать задачу" });
-    return;
-  }
+    const { canManage } = await getTaskEditRights(task, req.user!.id);
 
-  await maybeNotifyAssignment(task as Task);
-  res.status(201).json({ task });
-});
+    // A plain assignee may only move the task along; everything else is
+    // reserved for the creator / workspace owner.
+    const updates: Partial<Task> = {};
+
+    if (canManage) {
+      if (body.title !== undefined) updates.title = body.title;
+      if (body.description !== undefined) updates.description = body.description || null;
+      if (body.dueAt !== undefined) updates.due_at = body.dueAt;
+      if (body.assigneeId !== undefined) {
+        if (body.assigneeId) {
+          await requireAssigneeIsMember(task.workspace_id, body.assigneeId);
+        }
+        updates.assignee_id = body.assigneeId;
+      }
+    }
+
+    if (body.status !== undefined) updates.status = body.status;
+
+    if (Object.keys(updates).length === 0) {
+      throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Нет данных для обновления" });
+    }
+
+    updates.updated_at = new Date().toISOString();
+
+    const { data: updated, error } = await supabase
+      .from("tasks")
+      .update(updates)
+      .eq("id", task.id)
+      .select("*")
+      .single();
+
+    if (error || !updated) throw error ?? new ApiError(ERROR_CODES.INTERNAL);
+
+    const assigneeChanged = updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id;
+    if (assigneeChanged) {
+      await maybeNotifyAssignment(updated as Task);
+    }
+
+    res.json({ task: updated });
+  }),
+);
+
+// DELETE /api/tasks/:id
+tasksRouter.delete(
+  "/:id",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
+    if (error) throw error;
+
+    res.status(204).send();
+  }),
+);
 
 // GET /api/workspaces/:workspaceId/tasks — mounted separately in index.ts
 export const workspaceTasksRouter = Router({ mergeParams: true });
 workspaceTasksRouter.use(requireAuth);
 
-workspaceTasksRouter.get("/", async (req, res) => {
-  const { workspaceId } = req.params as { workspaceId: string };
+workspaceTasksRouter.get(
+  "/",
+  validateParams(workspaceIdParamSchema),
+  asyncHandler(async (req, res) => {
+    const { workspaceId } = req.params as { workspaceId: string };
+    await requireMembership(workspaceId, req.user!.id);
 
-  if (!(await getMembership(workspaceId, req.user!.id))) {
-    res.status(403).json({ error: "Вы не состоите в этой группе" });
-    return;
-  }
+    const { data, error } = await supabase
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .order("created_at", { ascending: false });
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .order("created_at", { ascending: false });
+    if (error) throw error;
 
-  if (error) {
-    res.status(500).json({ error: "Не удалось загрузить задачи группы" });
-    return;
-  }
-
-  res.json({ tasks: data ?? [] });
-});
-
-// PATCH /api/tasks/:id
-tasksRouter.patch("/:id", async (req, res) => {
-  const task = await getTaskOr404(req.params.id);
-  if (!task) {
-    res.status(404).json({ error: "Задача не найдена" });
-    return;
-  }
-
-  const membership = await getMembership(task.workspace_id, req.user!.id);
-  if (!membership) {
-    res.status(403).json({ error: "Нет доступа к этой задаче" });
-    return;
-  }
-
-  const isManager = await canManageTask(task, req.user!.id);
-  const isAssignee = task.assignee_id === req.user!.id;
-
-  if (!isManager && !isAssignee) {
-    res.status(403).json({ error: "Недостаточно прав для изменения задачи" });
-    return;
-  }
-
-  const body = req.body as {
-    title?: string;
-    description?: string;
-    assigneeId?: string | null;
-    status?: TaskStatus;
-    dueAt?: string | null;
-  };
-
-  // The assignee (who isn't creator/owner) may only change status.
-  const updates: Partial<Task> = {};
-  if (isManager) {
-    if (body.title !== undefined) updates.title = body.title.trim();
-    if (body.description !== undefined) updates.description = body.description?.trim() || null;
-    if (body.dueAt !== undefined) updates.due_at = body.dueAt;
-    if (body.assigneeId !== undefined) {
-      if (body.assigneeId && !(await getMembership(task.workspace_id, body.assigneeId))) {
-        res.status(400).json({ error: "Исполнитель должен быть участником группы" });
-        return;
-      }
-      updates.assignee_id = body.assigneeId;
-    }
-  }
-
-  if (body.status !== undefined) {
-    if (!VALID_STATUSES.includes(body.status)) {
-      res.status(400).json({ error: "Недопустимый статус" });
-      return;
-    }
-    updates.status = body.status;
-  }
-
-  if (Object.keys(updates).length === 0) {
-    res.status(400).json({ error: "Нет данных для обновления" });
-    return;
-  }
-
-  updates.updated_at = new Date().toISOString();
-
-  const { data: updated, error } = await supabase
-    .from("tasks")
-    .update(updates)
-    .eq("id", task.id)
-    .select("*")
-    .single();
-
-  if (error || !updated) {
-    res.status(500).json({ error: "Не удалось обновить задачу" });
-    return;
-  }
-
-  const assigneeChanged = updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id;
-  if (assigneeChanged) {
-    await maybeNotifyAssignment(updated as Task);
-  }
-
-  res.json({ task: updated });
-});
-
-// DELETE /api/tasks/:id
-tasksRouter.delete("/:id", async (req, res) => {
-  const task = await getTaskOr404(req.params.id);
-  if (!task) {
-    res.status(404).json({ error: "Задача не найдена" });
-    return;
-  }
-
-  if (!(await canManageTask(task, req.user!.id))) {
-    res.status(403).json({ error: "Недостаточно прав для удаления задачи" });
-    return;
-  }
-
-  const { error } = await supabase.from("tasks").delete().eq("id", task.id);
-  if (error) {
-    res.status(500).json({ error: "Не удалось удалить задачу" });
-    return;
-  }
-
-  res.status(204).send();
-});
+    res.json({ tasks: data ?? [] });
+  }),
+);
 
 async function maybeNotifyAssignment(task: Task): Promise<void> {
   if (!task.assignee_id) return;

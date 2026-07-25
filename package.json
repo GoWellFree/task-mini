@@ -3,15 +3,20 @@
   "private": true,
   "version": "0.1.0",
   "workspaces": [
+    "packages/*",
     "frontend",
     "backend"
   ],
   "scripts": {
-    "dev:frontend": "npm --workspace frontend run dev",
-    "dev:backend": "npm --workspace backend run dev",
-    "build:frontend": "npm --workspace frontend run build",
-    "build:backend": "npm --workspace backend run build",
-    "typecheck:frontend": "npm --workspace frontend run typecheck",
-    "typecheck:backend": "npm --workspace backend run typecheck"
+    "dev:frontend": "npm run build:shared && npm --workspace frontend run dev",
+    "dev:backend": "npm run build:shared && npm --workspace backend run dev",
+    "build:shared": "npm --workspace @task-mini/shared run build",
+    "build:frontend": "npm run build:shared && npm --workspace frontend run build",
+    "build:backend": "npm run build:shared && npm --workspace backend run build",
+    "typecheck:shared": "npm --workspace @task-mini/shared run typecheck",
+    "typecheck:frontend": "npm run build:shared && npm --workspace frontend run typecheck",
+    "typecheck:backend": "npm run build:shared && npm --workspace backend run typecheck",
+    "lint": "npm --workspace @task-mini/shared run lint && npm --workspace backend run lint && npm --workspace frontend run lint",
+    "test": "npm --workspace @task-mini/shared run test && npm --workspace backend run test"
   }
 }
