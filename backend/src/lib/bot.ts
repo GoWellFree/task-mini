@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import TelegramBot from "node-telegram-bot-api";
 import { env } from "./env.js";
 import type { Task } from "../types/index.js";
@@ -7,6 +8,39 @@ import type { Task } from "../types/index.js";
 export const bot = new TelegramBot(env.telegramBotToken, {
   polling: !env.isProduction,
 });
+
+/**
+ * Constant-time check of the X-Telegram-Bot-Api-Secret-Token header Telegram
+ * sends on every webhook request (configured via setWebhook's secret_token).
+ * Rejects requests that don't carry the exact secret, even if the webhook
+ * path itself has leaked.
+ */
+export function isValidWebhookSecret(headerValue: string | undefined): boolean {
+  if (!env.telegramWebhookSecret || !headerValue) return false;
+
+  const expected = Buffer.from(env.telegramWebhookSecret);
+  const provided = Buffer.from(headerValue);
+  return expected.length === provided.length && crypto.timingSafeEqual(expected, provided);
+}
+
+// Telegram may redeliver the same update (e.g. after a slow response), so we
+// keep a short-lived record of recently processed update_ids to avoid
+// double-processing commands or sending duplicate notifications. A single
+// Railway instance is assumed for MVP; move this to a shared store (DB/Redis)
+// before scaling to multiple backend instances.
+const MAX_TRACKED_UPDATE_IDS = 5000;
+const processedUpdateIds = new Set<number>();
+
+export function shouldProcessUpdate(updateId: number): boolean {
+  if (processedUpdateIds.has(updateId)) return false;
+
+  processedUpdateIds.add(updateId);
+  if (processedUpdateIds.size > MAX_TRACKED_UPDATE_IDS) {
+    const oldest = processedUpdateIds.values().next().value;
+    if (oldest !== undefined) processedUpdateIds.delete(oldest);
+  }
+  return true;
+}
 
 export function miniAppUrl(path = ""): string {
   return `https://t.me/${env.telegramBotUsername}/app${path}`;

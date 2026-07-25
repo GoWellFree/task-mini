@@ -73,11 +73,20 @@ npm run build:frontend
 
 ### Настройка Telegram webhook (production)
 
-Backend в production ожидает обновления на `POST /webhook/<TELEGRAM_BOT_TOKEN>`.
-Зарегистрируйте webhook одним запросом (замените значения):
+Backend в production ожидает обновления на `POST /webhook/<TELEGRAM_WEBHOOK_PATH>`.
+Путь — случайная строка (НЕ токен бота), а каждый запрос дополнительно проверяется
+по заголовку `X-Telegram-Bot-Api-Secret-Token`. Сгенерируйте оба значения и укажите
+их в переменных окружения backend (`TELEGRAM_WEBHOOK_PATH`, `TELEGRAM_WEBHOOK_SECRET`):
 
 ```bash
-curl -F "url=https://your-api.up.railway.app/webhook/<TELEGRAM_BOT_TOKEN>" \
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
+
+Затем зарегистрируйте webhook одним запросом (замените значения):
+
+```bash
+curl -F "url=https://your-api.up.railway.app/webhook/<TELEGRAM_WEBHOOK_PATH>" \
+  -F "secret_token=<TELEGRAM_WEBHOOK_SECRET>" \
   https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook
 ```
 
