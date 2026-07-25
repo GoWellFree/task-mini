@@ -75,13 +75,24 @@ jobs:
 
       - name: Apply migrations in order
         run: |
-          shopt -s nullglob
-          files=(supabase/migrations/*.sql)
+          shopt -s nullglob extglob
+          # Forward migrations only — *.down.sql are rollbacks and would
+          # undo the very schema this job is validating.
+          files=(supabase/migrations/!(*.down).sql)
           if [ ${#files[@]} -eq 0 ]; then
             echo "No migrations to validate yet."
             exit 0
           fi
           for f in "${files[@]}"; do
             echo "Applying $f"
+            docker exec -i pg psql -v ON_ERROR_STOP=1 -U postgres -d task_mini_ci < "$f"
+          done
+
+      # A rollback that doesn't parse is worthless at the moment it's needed.
+      - name: Verify rollback scripts apply cleanly
+        run: |
+          shopt -s nullglob
+          for f in $(ls -r supabase/migrations/*.down.sql 2>/dev/null); do
+            echo "Reverting $f"
             docker exec -i pg psql -v ON_ERROR_STOP=1 -U postgres -d task_mini_ci < "$f"
           done
