@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  createProjectSchema,
   createTaskSchema,
   createWorkspaceSchema,
+  updateProjectSchema,
   updateTaskSchema,
   updateUserSettingsSchema,
   TITLE_MAX,
@@ -123,5 +125,48 @@ describe("updateUserSettingsSchema", () => {
   it("rejects a non-UUID defaultWorkspaceId but allows clearing it", () => {
     expect(updateUserSettingsSchema.safeParse({ defaultWorkspaceId: "nope" }).success).toBe(false);
     expect(updateUserSettingsSchema.safeParse({ defaultWorkspaceId: null }).success).toBe(true);
+  });
+});
+
+describe("createProjectSchema", () => {
+  it("accepts a minimal valid project", () => {
+    expect(createProjectSchema.safeParse({ name: "Ремонт кухни" }).success).toBe(true);
+  });
+
+  it("rejects an empty or whitespace-only name", () => {
+    expect(createProjectSchema.safeParse({ name: "" }).success).toBe(false);
+    expect(createProjectSchema.safeParse({ name: "   " }).success).toBe(false);
+  });
+
+  it("rejects a status outside the supported set", () => {
+    expect(createProjectSchema.safeParse({ name: "x", status: "done" }).success).toBe(false);
+    expect(createProjectSchema.safeParse({ name: "x", status: "active" }).success).toBe(true);
+  });
+
+  it("validates the color as a hex code", () => {
+    expect(createProjectSchema.safeParse({ name: "x", color: "#3B82F6" }).success).toBe(true);
+    expect(createProjectSchema.safeParse({ name: "x", color: "#3B8" }).success).toBe(true);
+    expect(createProjectSchema.safeParse({ name: "x", color: "blue" }).success).toBe(false);
+    expect(createProjectSchema.safeParse({ name: "x", color: "3B82F6" }).success).toBe(false);
+  });
+});
+
+describe("updateProjectSchema", () => {
+  it("rejects an empty patch", () => {
+    expect(updateProjectSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("allows archiving via status alone", () => {
+    expect(updateProjectSchema.safeParse({ status: "archived" }).success).toBe(true);
+  });
+
+  it("allows clearing optional fields", () => {
+    const result = updateProjectSchema.safeParse({ description: null, icon: null, color: null, dueAt: null });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a negative position", () => {
+    expect(updateProjectSchema.safeParse({ position: -1 }).success).toBe(false);
+    expect(updateProjectSchema.safeParse({ position: 0 }).success).toBe(true);
   });
 });

@@ -9,6 +9,7 @@ import { bot, isValidWebhookSecret, registerBotCommands, shouldProcessUpdate } f
 import { errorHandler, notFoundHandler, requestId } from "./middleware/errorHandler.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
+import { projectsRouter, workspaceProjectsRouter } from "./routes/projects.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { tasksRouter, workspaceTasksRouter } from "./routes/tasks.js";
 
@@ -87,11 +88,17 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
+// Pre-existing endpoints stay at /api/* unversioned — the deployed frontend
+// and Telegram deep-links already depend on these exact paths. Everything
+// new (per the spec) goes under /api/v1/*.
 app.use("/api/auth", authRouter);
-app.use("/api/users", usersRouter);
 app.use("/api/workspaces", workspacesRouter);
 app.use("/api/workspaces/:workspaceId/tasks", workspaceTasksRouter);
 app.use("/api/tasks", tasksRouter);
+
+app.use("/api/v1/users", usersRouter);
+app.use("/api/v1/workspaces/:workspaceId/projects", workspaceProjectsRouter);
+app.use("/api/v1/projects", projectsRouter);
 
 registerBotCommands();
 

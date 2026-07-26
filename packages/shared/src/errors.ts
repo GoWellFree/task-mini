@@ -19,6 +19,8 @@ export const ERROR_CODES = {
   TASK_VERSION_CONFLICT: "TASK_VERSION_CONFLICT",
   INVITE_NOT_FOUND: "INVITE_NOT_FOUND",
   ASSIGNEE_NOT_MEMBER: "ASSIGNEE_NOT_MEMBER",
+  PROJECT_NOT_FOUND: "PROJECT_NOT_FOUND",
+  PROJECT_ACCESS_DENIED: "PROJECT_ACCESS_DENIED",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -53,6 +55,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   TASK_VERSION_CONFLICT: "Задача изменена в другом месте. Обновите страницу и попробуйте снова",
   INVITE_NOT_FOUND: "Приглашение не найдено",
   ASSIGNEE_NOT_MEMBER: "Исполнитель должен быть участником группы",
+  PROJECT_NOT_FOUND: "Проект не найден",
+  PROJECT_ACCESS_DENIED: "Нет доступа к этому проекту",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -75,4 +79,6 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   TASK_VERSION_CONFLICT: 409,
   INVITE_NOT_FOUND: 404,
   ASSIGNEE_NOT_MEMBER: 400,
+  PROJECT_NOT_FOUND: 404,
+  PROJECT_ACCESS_DENIED: 403,
 };

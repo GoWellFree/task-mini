@@ -1,4 +1,4 @@
-import type { TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
+import type { ProjectStatus, TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
 
 export interface User {
   id: string;
@@ -41,6 +41,23 @@ export interface UserSettings {
   quiet_hours_end: string | null;
   telegram_notifications_enabled: boolean;
   theme: Theme;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Project {
+  id: string;
+  workspace_id: string;
+  name: string;
+  description: string | null;
+  icon: string | null;
+  color: string | null;
+  status: ProjectStatus;
+  owner_id: string;
+  start_at: string | null;
+  due_at: string | null;
+  position: number;
+  archived_at: string | null;
   created_at: string;
   updated_at: string;
 }

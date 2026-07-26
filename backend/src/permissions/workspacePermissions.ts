@@ -1,7 +1,7 @@
 import { ERROR_CODES } from "@task-mini/shared";
 import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
-import type { Task, WorkspaceMember } from "../types/index.js";
+import type { Project, Task, WorkspaceMember } from "../types/index.js";
 
 /**
  * Central authorization checks. Routes must call these rather than
@@ -42,15 +42,20 @@ export async function requireContributor(workspaceId: string, userId: string): P
 }
 
 /**
- * Task creator, workspace owner, or workspace admin: may edit every field
- * and delete the task. 'manager' is deliberately not included here yet — it
- * has no distinct scope until project-level management exists to give it
- * one, so for now it behaves like a plain member (assignee-only rights).
+ * Owner or admin — the two roles with blanket edit rights over everything
+ * in the workspace. 'manager' is deliberately not included yet: it has no
+ * distinct scope until project-level management exists to give it one, so
+ * for now it behaves like a plain member.
  */
+async function isWorkspaceManager(workspaceId: string, userId: string): Promise<boolean> {
+  const membership = await getMembership(workspaceId, userId);
+  return membership?.role === "owner" || membership?.role === "admin";
+}
+
+/** Task creator, workspace owner, or workspace admin: may edit every field and delete the task. */
 export async function canManageTask(task: Task, userId: string): Promise<boolean> {
   if (task.creator_id === userId) return true;
-  const membership = await getMembership(task.workspace_id, userId);
-  return membership?.role === "owner" || membership?.role === "admin";
+  return isWorkspaceManager(task.workspace_id, userId);
 }
 
 export async function requireTaskManager(task: Task, userId: string): Promise<void> {
@@ -88,5 +93,19 @@ export async function requireAssigneeIsMember(workspaceId: string, assigneeId: s
   const membership = await getMembership(workspaceId, assigneeId);
   if (!membership || membership.role === "viewer") {
     throw new ApiError(ERROR_CODES.ASSIGNEE_NOT_MEMBER);
+  }
+}
+
+/** Project owner, workspace owner, or workspace admin: may edit or archive the project. */
+export async function canManageProject(project: Project, userId: string): Promise<boolean> {
+  if (project.owner_id === userId) return true;
+  return isWorkspaceManager(project.workspace_id, userId);
+}
+
+export async function requireProjectManager(project: Project, userId: string): Promise<void> {
+  if (!(await canManageProject(project, userId))) {
+    throw new ApiError(ERROR_CODES.PROJECT_ACCESS_DENIED, {
+      message: "Недостаточно прав для изменения проекта",
+    });
   }
 }

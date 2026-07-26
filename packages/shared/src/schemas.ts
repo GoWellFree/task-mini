@@ -1,9 +1,13 @@
 import { z } from "zod";
-import { TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
+import { PROJECT_STATUS_VALUES, TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
 
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 5000;
 export const WORKSPACE_NAME_MAX = 100;
+export const PROJECT_NAME_MAX = 100;
+export const PROJECT_ICON_MAX = 16;
+/** #RGB or #RRGGBB — kept deliberately simple; a swatch picker constrains input anyway. */
+const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
 const uuid = z.string().uuid();
 
@@ -76,6 +80,33 @@ export const updateUserSettingsSchema = z
   })
   .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
 export type UpdateUserSettingsInput = z.infer<typeof updateUserSettingsSchema>;
+
+const projectStatus = z.enum(PROJECT_STATUS_VALUES);
+
+export const createProjectSchema = z.object({
+  name: z.string().trim().min(1, "Укажите название проекта").max(PROJECT_NAME_MAX),
+  description: z.string().trim().max(DESCRIPTION_MAX).optional(),
+  icon: z.string().trim().max(PROJECT_ICON_MAX).optional(),
+  color: z.string().regex(HEX_COLOR, "Укажите цвет в формате #RRGGBB").optional(),
+  status: projectStatus.optional(),
+  startAt: isoDateTime.optional(),
+  dueAt: isoDateTime.optional(),
+});
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+
+export const updateProjectSchema = z
+  .object({
+    name: z.string().trim().min(1).max(PROJECT_NAME_MAX).optional(),
+    description: z.string().trim().max(DESCRIPTION_MAX).nullable().optional(),
+    icon: z.string().trim().max(PROJECT_ICON_MAX).nullable().optional(),
+    color: z.string().regex(HEX_COLOR).nullable().optional(),
+    status: projectStatus.optional(),
+    startAt: isoDateTime.nullable().optional(),
+    dueAt: isoDateTime.nullable().optional(),
+    position: z.number().int().min(0).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });

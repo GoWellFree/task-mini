@@ -32,8 +32,15 @@ vi.mock("../lib/supabase.js", () => ({
   },
 }));
 
-const { canManageTask, getTaskEditRights, requireAssigneeIsMember, requireContributor, requireMembership } =
-  await import("./workspacePermissions.js");
+const {
+  canManageProject,
+  canManageTask,
+  getTaskEditRights,
+  requireAssigneeIsMember,
+  requireContributor,
+  requireMembership,
+  requireProjectManager,
+} = await import("./workspacePermissions.js");
 
 const WORKSPACE_ID = "11111111-2222-4333-8444-555555555555";
 const CREATOR_ID = "aaaaaaaa-2222-4333-8444-555555555555";
@@ -50,6 +57,12 @@ const task = {
   creator_id: CREATOR_ID,
   assignee_id: ASSIGNEE_ID,
 } as Parameters<typeof canManageTask>[0];
+
+const project = {
+  id: "99999999-2222-4333-8444-555555555555",
+  workspace_id: WORKSPACE_ID,
+  owner_id: CREATOR_ID,
+} as Parameters<typeof canManageProject>[0];
 
 beforeEach(() => {
   state.membershipByUser = new Map(
@@ -177,5 +190,33 @@ describe("requireAssigneeIsMember", () => {
     await expect(requireAssigneeIsMember(WORKSPACE_ID, OUTSIDER_ID)).rejects.toMatchObject({
       code: "ASSIGNEE_NOT_MEMBER",
     });
+  });
+});
+
+describe("canManageProject / requireProjectManager", () => {
+  it("allows the project owner", async () => {
+    await expect(canManageProject(project, CREATOR_ID)).resolves.toBe(true);
+  });
+
+  it("allows the workspace owner even if they didn't create the project", async () => {
+    await expect(canManageProject(project, OWNER_ID)).resolves.toBe(true);
+  });
+
+  it("allows a workspace admin", async () => {
+    await expect(canManageProject(project, ADMIN_ID)).resolves.toBe(true);
+  });
+
+  it("denies a plain member who doesn't own the project", async () => {
+    await expect(canManageProject(project, ASSIGNEE_ID)).resolves.toBe(false);
+  });
+
+  it("requireProjectManager throws PROJECT_ACCESS_DENIED for a non-manager", async () => {
+    await expect(requireProjectManager(project, ASSIGNEE_ID)).rejects.toMatchObject({
+      code: "PROJECT_ACCESS_DENIED",
+    });
+  });
+
+  it("requireProjectManager resolves silently for the owner", async () => {
+    await expect(requireProjectManager(project, CREATOR_ID)).resolves.toBeUndefined();
   });
 });
