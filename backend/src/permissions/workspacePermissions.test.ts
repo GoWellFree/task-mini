@@ -40,6 +40,7 @@ const {
   requireContributor,
   requireMembership,
   requireProjectManager,
+  requireWorkspaceManager,
 } = await import("./workspacePermissions.js");
 
 const WORKSPACE_ID = "11111111-2222-4333-8444-555555555555";
@@ -218,5 +219,27 @@ describe("canManageProject / requireProjectManager", () => {
 
   it("requireProjectManager resolves silently for the owner", async () => {
     await expect(requireProjectManager(project, CREATOR_ID)).resolves.toBeUndefined();
+  });
+});
+
+describe("requireWorkspaceManager", () => {
+  it("resolves for the workspace owner and an admin", async () => {
+    await expect(requireWorkspaceManager(WORKSPACE_ID, OWNER_ID)).resolves.toBeUndefined();
+    await expect(requireWorkspaceManager(WORKSPACE_ID, ADMIN_ID)).resolves.toBeUndefined();
+  });
+
+  it("rejects a plain member — labels are shared workspace state, not owned by whoever created them", async () => {
+    await expect(requireWorkspaceManager(WORKSPACE_ID, CREATOR_ID)).rejects.toMatchObject({
+      code: "WORKSPACE_ACCESS_DENIED",
+    });
+  });
+
+  it("rejects a manager and a viewer — only owner/admin qualify today", async () => {
+    await expect(requireWorkspaceManager(WORKSPACE_ID, MANAGER_ID)).rejects.toMatchObject({
+      code: "WORKSPACE_ACCESS_DENIED",
+    });
+    await expect(requireWorkspaceManager(WORKSPACE_ID, VIEWER_ID)).rejects.toMatchObject({
+      code: "WORKSPACE_ACCESS_DENIED",
+    });
   });
 });

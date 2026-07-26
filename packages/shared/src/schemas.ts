@@ -6,6 +6,7 @@ export const DESCRIPTION_MAX = 5000;
 export const WORKSPACE_NAME_MAX = 100;
 export const PROJECT_NAME_MAX = 100;
 export const PROJECT_ICON_MAX = 16;
+export const LABEL_NAME_MAX = 50;
 /** #RGB or #RRGGBB — kept deliberately simple; a swatch picker constrains input anyway. */
 const HEX_COLOR = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
@@ -129,6 +130,24 @@ export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 export const addAssigneeSchema = z.object({ userId: uuid });
 export type AddAssigneeInput = z.infer<typeof addAssigneeSchema>;
 
+export const createLabelSchema = z.object({
+  name: z.string().trim().min(1, "Укажите название метки").max(LABEL_NAME_MAX),
+  color: z.string().regex(HEX_COLOR, "Укажите цвет в формате #RRGGBB").optional(),
+});
+export type CreateLabelInput = z.infer<typeof createLabelSchema>;
+
+export const updateLabelSchema = z
+  .object({
+    name: z.string().trim().min(1).max(LABEL_NAME_MAX).optional(),
+    color: z.string().regex(HEX_COLOR).nullable().optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+export type UpdateLabelInput = z.infer<typeof updateLabelSchema>;
+
+export const attachLabelSchema = z.object({ labelId: uuid });
+export type AttachLabelInput = z.infer<typeof attachLabelSchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });
 export const taskAssigneeParamSchema = z.object({ id: uuid, userId: uuid });
+export const taskLabelParamSchema = z.object({ id: uuid, labelId: uuid });

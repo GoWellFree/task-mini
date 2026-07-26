@@ -47,9 +47,18 @@ export async function requireContributor(workspaceId: string, userId: string): P
  * distinct scope until project-level management exists to give it one, so
  * for now it behaves like a plain member.
  */
-async function isWorkspaceManager(workspaceId: string, userId: string): Promise<boolean> {
+export async function isWorkspaceManager(workspaceId: string, userId: string): Promise<boolean> {
   const membership = await getMembership(workspaceId, userId);
   return membership?.role === "owner" || membership?.role === "admin";
+}
+
+/** For workspace-level resources with no individual owner (labels): only owner/admin may change them. */
+export async function requireWorkspaceManager(workspaceId: string, userId: string): Promise<void> {
+  if (!(await isWorkspaceManager(workspaceId, userId))) {
+    throw new ApiError(ERROR_CODES.WORKSPACE_ACCESS_DENIED, {
+      message: "Требуются права владельца или администратора группы",
+    });
+  }
 }
 
 /** Task creator, workspace owner, or workspace admin: may edit every field and delete the task. */

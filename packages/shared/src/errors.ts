@@ -21,6 +21,8 @@ export const ERROR_CODES = {
   ASSIGNEE_NOT_MEMBER: "ASSIGNEE_NOT_MEMBER",
   PROJECT_NOT_FOUND: "PROJECT_NOT_FOUND",
   PROJECT_ACCESS_DENIED: "PROJECT_ACCESS_DENIED",
+  LABEL_NOT_FOUND: "LABEL_NOT_FOUND",
+  LABEL_NAME_TAKEN: "LABEL_NAME_TAKEN",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -57,6 +59,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   ASSIGNEE_NOT_MEMBER: "Исполнитель должен быть участником группы",
   PROJECT_NOT_FOUND: "Проект не найден",
   PROJECT_ACCESS_DENIED: "Нет доступа к этому проекту",
+  LABEL_NOT_FOUND: "Метка не найдена",
+  LABEL_NAME_TAKEN: "Метка с таким названием уже существует",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -81,4 +85,6 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   ASSIGNEE_NOT_MEMBER: 400,
   PROJECT_NOT_FOUND: 404,
   PROJECT_ACCESS_DENIED: 403,
+  LABEL_NOT_FOUND: 404,
+  LABEL_NAME_TAKEN: 409,
 };

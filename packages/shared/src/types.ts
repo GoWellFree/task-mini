@@ -120,6 +120,14 @@ export interface TaskAssigneeWithUser extends TaskAssignee {
   user: PublicUser;
 }
 
+export interface Label {
+  id: string;
+  workspace_id: string;
+  name: string;
+  color: string | null;
+  created_at: string;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   telegramId: number;

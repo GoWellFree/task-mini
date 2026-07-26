@@ -2,6 +2,7 @@ import type { User } from "@task-mini/shared";
 
 export type {
   AuthTokenPayload,
+  Label,
   Project,
   PublicUser,
   Task,

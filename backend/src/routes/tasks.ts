@@ -2,12 +2,15 @@ import { Router } from "express";
 import {
   ERROR_CODES,
   addAssigneeSchema,
+  attachLabelSchema,
   createTaskSchema,
   taskAssigneeParamSchema,
+  taskLabelParamSchema,
   updateTaskSchema,
   uuidParamSchema,
   workspaceIdParamSchema,
   type AddAssigneeInput,
+  type AttachLabelInput,
   type CreateTaskInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
@@ -32,6 +35,8 @@ import {
   wouldCreateCycle,
 } from "../repositories/taskRepository.js";
 import { listAssignees } from "../repositories/taskAssigneeRepository.js";
+import { attachLabel, detachLabel, listLabelsForTask } from "../repositories/taskLabelRepository.js";
+import { getLabelById } from "../repositories/labelRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
@@ -285,6 +290,57 @@ tasksRouter.delete(
 
     const { userId } = req.params as { userId: string };
     await taskAssignmentService.removeAssignee(task.id, userId, task.assignee_id);
+
+    res.status(204).send();
+  }),
+);
+
+// GET /api/tasks/:id/labels
+tasksRouter.get(
+  "/:id/labels",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const labels = await listLabelsForTask(task.id);
+    res.json({ labels });
+  }),
+);
+
+// POST /api/tasks/:id/labels
+tasksRouter.post(
+  "/:id/labels",
+  validateParams(uuidParamSchema),
+  validateBody(attachLabelSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { labelId } = req.body as AttachLabelInput;
+    const label = await getLabelById(labelId);
+    if (!label || label.workspace_id !== task.workspace_id) {
+      throw new ApiError(ERROR_CODES.LABEL_NOT_FOUND);
+    }
+
+    await attachLabel(task.id, labelId);
+    const labels = await listLabelsForTask(task.id);
+    res.status(201).json({ labels });
+  }),
+);
+
+// DELETE /api/tasks/:id/labels/:labelId
+tasksRouter.delete(
+  "/:id/labels/:labelId",
+  validateParams(taskLabelParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { labelId } = req.params as { labelId: string };
+    await detachLabel(task.id, labelId);
 
     res.status(204).send();
   }),

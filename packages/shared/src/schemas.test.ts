@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  createLabelSchema,
   createProjectSchema,
   createTaskSchema,
   createWorkspaceSchema,
+  updateLabelSchema,
   updateProjectSchema,
   updateTaskSchema,
   updateUserSettingsSchema,
@@ -207,5 +209,35 @@ describe("updateProjectSchema", () => {
   it("rejects a negative position", () => {
     expect(updateProjectSchema.safeParse({ position: -1 }).success).toBe(false);
     expect(updateProjectSchema.safeParse({ position: 0 }).success).toBe(true);
+  });
+});
+
+describe("createLabelSchema", () => {
+  it("accepts a name-only label", () => {
+    expect(createLabelSchema.safeParse({ name: "Срочно" }).success).toBe(true);
+  });
+
+  it("rejects an empty or whitespace-only name", () => {
+    expect(createLabelSchema.safeParse({ name: "" }).success).toBe(false);
+    expect(createLabelSchema.safeParse({ name: "  " }).success).toBe(false);
+  });
+
+  it("validates the color as a hex code when given", () => {
+    expect(createLabelSchema.safeParse({ name: "x", color: "#FF0000" }).success).toBe(true);
+    expect(createLabelSchema.safeParse({ name: "x", color: "red" }).success).toBe(false);
+  });
+});
+
+describe("updateLabelSchema", () => {
+  it("rejects an empty patch", () => {
+    expect(updateLabelSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("allows clearing the color", () => {
+    expect(updateLabelSchema.safeParse({ color: null }).success).toBe(true);
+  });
+
+  it("accepts a rename alone", () => {
+    expect(updateLabelSchema.safeParse({ name: "Не срочно" }).success).toBe(true);
   });
 });

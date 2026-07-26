@@ -9,6 +9,7 @@ import { bot, isValidWebhookSecret, registerBotCommands, shouldProcessUpdate } f
 import { errorHandler, notFoundHandler, requestId } from "./middleware/errorHandler.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
+import { labelsRouter, workspaceLabelsRouter } from "./routes/labels.js";
 import { projectsRouter, workspaceProjectsRouter } from "./routes/projects.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { tasksRouter, workspaceTasksRouter } from "./routes/tasks.js";
@@ -99,6 +100,8 @@ app.use("/api/tasks", tasksRouter);
 app.use("/api/v1/users", usersRouter);
 app.use("/api/v1/workspaces/:workspaceId/projects", workspaceProjectsRouter);
 app.use("/api/v1/projects", projectsRouter);
+app.use("/api/v1/workspaces/:workspaceId/labels", workspaceLabelsRouter);
+app.use("/api/v1/labels", labelsRouter);
 
 registerBotCommands();
 
