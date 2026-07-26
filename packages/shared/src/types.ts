@@ -128,6 +128,16 @@ export interface Label {
   created_at: string;
 }
 
+export interface ChecklistItem {
+  id: string;
+  task_id: string;
+  title: string;
+  is_done: boolean;
+  position: number;
+  created_at: string;
+  completed_at: string | null;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   telegramId: number;

@@ -9,7 +9,7 @@ interface MembershipRow {
 // exercise the authorization rules rather than the database. Keyed by
 // user_id so a single test can simulate several members with different
 // roles at once (e.g. an admin and a viewer in the same workspace).
-const state = { membershipByUser: new Map<string, MembershipRow>() };
+const state = { membershipByUser: new Map<string, MembershipRow>(), assigneeIds: [] as string[] };
 
 vi.mock("../lib/supabase.js", () => ({
   supabase: {
@@ -30,6 +30,14 @@ vi.mock("../lib/supabase.js", () => ({
       return builder;
     },
   },
+}));
+
+// getTaskEditRights now consults the full task_assignees set (not just the
+// legacy assignee_id mirror) via this repository — stubbed independently of
+// the supabase mock above so tests can say exactly who is "an assignee" for
+// the fixture task, same spirit as membershipByUser above.
+vi.mock("../repositories/taskAssigneeRepository.js", () => ({
+  listAssigneeIds: async () => state.assigneeIds,
 }));
 
 const {
@@ -77,6 +85,7 @@ beforeEach(() => {
     ].map((row) => [row.user_id, row]),
   );
   // OUTSIDER_ID is deliberately never added — a non-member.
+  state.assigneeIds = [ASSIGNEE_ID];
 });
 
 describe("requireMembership", () => {
@@ -149,6 +158,20 @@ describe("getTaskEditRights", () => {
 
   it("grants the assignee status-only rights", async () => {
     await expect(getTaskEditRights(task, ASSIGNEE_ID)).resolves.toEqual({
+      canManage: false,
+      canChangeStatus: true,
+    });
+  });
+
+  it("grants status-only rights to a SECOND assignee too, not just the legacy primary one", async () => {
+    // Regression: this used to check only task.assignee_id, so a second
+    // assignee added via POST /tasks/:id/assignees couldn't even change the
+    // task's own status.
+    const secondAssigneeId = "ffffffff-3333-4333-8444-555555555555";
+    state.membershipByUser.set(secondAssigneeId, { user_id: secondAssigneeId, role: "member" });
+    state.assigneeIds = [ASSIGNEE_ID, secondAssigneeId];
+
+    await expect(getTaskEditRights(task, secondAssigneeId)).resolves.toEqual({
       canManage: false,
       canChangeStatus: true,
     });

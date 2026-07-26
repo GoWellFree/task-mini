@@ -147,7 +147,22 @@ export type UpdateLabelInput = z.infer<typeof updateLabelSchema>;
 export const attachLabelSchema = z.object({ labelId: uuid });
 export type AttachLabelInput = z.infer<typeof attachLabelSchema>;
 
+export const createChecklistItemSchema = z.object({
+  title: z.string().trim().min(1, "Укажите текст пункта").max(TITLE_MAX),
+});
+export type CreateChecklistItemInput = z.infer<typeof createChecklistItemSchema>;
+
+export const updateChecklistItemSchema = z
+  .object({
+    title: z.string().trim().min(1).max(TITLE_MAX).optional(),
+    isDone: z.boolean().optional(),
+    position: z.number().int().min(0).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });
 export const taskAssigneeParamSchema = z.object({ id: uuid, userId: uuid });
 export const taskLabelParamSchema = z.object({ id: uuid, labelId: uuid });
+export const taskChecklistItemParamSchema = z.object({ id: uuid, itemId: uuid });

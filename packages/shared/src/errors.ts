@@ -23,6 +23,7 @@ export const ERROR_CODES = {
   PROJECT_ACCESS_DENIED: "PROJECT_ACCESS_DENIED",
   LABEL_NOT_FOUND: "LABEL_NOT_FOUND",
   LABEL_NAME_TAKEN: "LABEL_NAME_TAKEN",
+  CHECKLIST_ITEM_NOT_FOUND: "CHECKLIST_ITEM_NOT_FOUND",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -61,6 +62,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   PROJECT_ACCESS_DENIED: "Нет доступа к этому проекту",
   LABEL_NOT_FOUND: "Метка не найдена",
   LABEL_NAME_TAKEN: "Метка с таким названием уже существует",
+  CHECKLIST_ITEM_NOT_FOUND: "Пункт чек-листа не найден",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -87,4 +89,5 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   PROJECT_ACCESS_DENIED: 403,
   LABEL_NOT_FOUND: 404,
   LABEL_NAME_TAKEN: 409,
+  CHECKLIST_ITEM_NOT_FOUND: 404,
 };

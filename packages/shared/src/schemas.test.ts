@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  createChecklistItemSchema,
   createLabelSchema,
   createProjectSchema,
   createTaskSchema,
   createWorkspaceSchema,
+  updateChecklistItemSchema,
   updateLabelSchema,
   updateProjectSchema,
   updateTaskSchema,
@@ -239,5 +241,30 @@ describe("updateLabelSchema", () => {
 
   it("accepts a rename alone", () => {
     expect(updateLabelSchema.safeParse({ name: "Не срочно" }).success).toBe(true);
+  });
+});
+
+describe("createChecklistItemSchema", () => {
+  it("accepts a non-empty title", () => {
+    expect(createChecklistItemSchema.safeParse({ title: "Купить муку" }).success).toBe(true);
+  });
+
+  it("rejects an empty or whitespace-only title", () => {
+    expect(createChecklistItemSchema.safeParse({ title: "" }).success).toBe(false);
+    expect(createChecklistItemSchema.safeParse({ title: "   " }).success).toBe(false);
+  });
+});
+
+describe("updateChecklistItemSchema", () => {
+  it("rejects an empty patch", () => {
+    expect(updateChecklistItemSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("accepts toggling isDone alone", () => {
+    expect(updateChecklistItemSchema.safeParse({ isDone: true }).success).toBe(true);
+  });
+
+  it("rejects a negative position", () => {
+    expect(updateChecklistItemSchema.safeParse({ position: -1 }).success).toBe(false);
   });
 });

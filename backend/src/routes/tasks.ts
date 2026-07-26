@@ -3,15 +3,20 @@ import {
   ERROR_CODES,
   addAssigneeSchema,
   attachLabelSchema,
+  createChecklistItemSchema,
   createTaskSchema,
   taskAssigneeParamSchema,
+  taskChecklistItemParamSchema,
   taskLabelParamSchema,
+  updateChecklistItemSchema,
   updateTaskSchema,
   uuidParamSchema,
   workspaceIdParamSchema,
   type AddAssigneeInput,
   type AttachLabelInput,
+  type CreateChecklistItemInput,
   type CreateTaskInput,
+  type UpdateChecklistItemInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
 import { ApiError } from "../lib/apiError.js";
@@ -37,6 +42,7 @@ import {
 import { listAssignees } from "../repositories/taskAssigneeRepository.js";
 import { attachLabel, detachLabel, listLabelsForTask } from "../repositories/taskLabelRepository.js";
 import { getLabelById } from "../repositories/labelRepository.js";
+import * as checklistItemRepository from "../repositories/checklistItemRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
@@ -53,6 +59,24 @@ async function getTaskOrThrow(taskId: string): Promise<Task> {
     throw new ApiError(ERROR_CODES.TASK_NOT_FOUND);
   }
   return task;
+}
+
+/**
+ * Checking off a checklist item is "making progress on the task", the same
+ * spirit as an assignee being allowed to move the task's own status along —
+ * getTaskEditRights already grants that to a manager or any of the task's
+ * (possibly several) assignees and throws for anyone else, which is exactly
+ * the rule wanted here too. Structural edits (add/rename/reorder/delete an
+ * item) are NOT covered by this and stay behind requireTaskManager, same as
+ * the task's other non-status fields.
+ */
+async function canToggleChecklist(task: Task, userId: string): Promise<boolean> {
+  try {
+    await getTaskEditRights(task, userId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** A project can only be attached to tasks in the same workspace it belongs to. */
@@ -342,6 +366,91 @@ tasksRouter.delete(
     const { labelId } = req.params as { labelId: string };
     await detachLabel(task.id, labelId);
 
+    res.status(204).send();
+  }),
+);
+
+// GET /api/tasks/:id/checklist
+tasksRouter.get(
+  "/:id/checklist",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const items = await checklistItemRepository.listForTask(task.id);
+    res.json({ items });
+  }),
+);
+
+// POST /api/tasks/:id/checklist — structural edit (adding an item): manager only.
+tasksRouter.post(
+  "/:id/checklist",
+  validateParams(uuidParamSchema),
+  validateBody(createChecklistItemSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { title } = req.body as CreateChecklistItemInput;
+    const item = await checklistItemRepository.create(task.id, title);
+    res.status(201).json({ item });
+  }),
+);
+
+// PATCH /api/tasks/:id/checklist/:itemId — isDone alone is open to any
+// assignee; renaming/repositioning requires manager rights (see canToggleChecklist).
+tasksRouter.patch(
+  "/:id/checklist/:itemId",
+  validateParams(taskChecklistItemParamSchema),
+  validateBody(updateChecklistItemSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const { itemId } = req.params as { itemId: string };
+    const existing = await checklistItemRepository.getById(itemId);
+    if (!existing || existing.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.CHECKLIST_ITEM_NOT_FOUND);
+    }
+
+    const body = req.body as UpdateChecklistItemInput;
+    const isStructuralEdit = body.title !== undefined || body.position !== undefined;
+
+    if (isStructuralEdit) {
+      await requireTaskManager(task, req.user!.id);
+    } else if (!(await canToggleChecklist(task, req.user!.id))) {
+      throw new ApiError(ERROR_CODES.TASK_ACCESS_DENIED, {
+        message: "Недостаточно прав для изменения задачи",
+      });
+    }
+
+    const item = await checklistItemRepository.update(itemId, {
+      ...(body.title !== undefined ? { title: body.title } : {}),
+      ...(body.position !== undefined ? { position: body.position } : {}),
+      ...(body.isDone !== undefined ? { is_done: body.isDone } : {}),
+    });
+    res.json({ item });
+  }),
+);
+
+// DELETE /api/tasks/:id/checklist/:itemId — structural edit: manager only.
+tasksRouter.delete(
+  "/:id/checklist/:itemId",
+  validateParams(taskChecklistItemParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { itemId } = req.params as { itemId: string };
+    const existing = await checklistItemRepository.getById(itemId);
+    if (!existing || existing.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.CHECKLIST_ITEM_NOT_FOUND);
+    }
+
+    await checklistItemRepository.remove(itemId);
     res.status(204).send();
   }),
 );

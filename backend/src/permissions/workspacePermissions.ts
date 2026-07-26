@@ -1,6 +1,7 @@
 import { ERROR_CODES } from "@task-mini/shared";
 import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
+import { listAssigneeIds } from "../repositories/taskAssigneeRepository.js";
 import type { Project, Task, WorkspaceMember } from "../types/index.js";
 
 /**
@@ -86,7 +87,11 @@ export async function getTaskEditRights(task: Task, userId: string): Promise<Tas
   await requireMembership(task.workspace_id, userId);
 
   const canManage = await canManageTask(task, userId);
-  const isAssignee = task.assignee_id === userId;
+  // Checks the full task_assignees set, not just the legacy assignee_id
+  // mirror — a task can have several assignees (see taskAssignmentService),
+  // and every one of them should be able to move their own task along, not
+  // only whichever one happens to be "primary".
+  const isAssignee = canManage ? true : (await listAssigneeIds(task.id)).includes(userId);
 
   if (!canManage && !isAssignee) {
     throw new ApiError(ERROR_CODES.TASK_ACCESS_DENIED, {
