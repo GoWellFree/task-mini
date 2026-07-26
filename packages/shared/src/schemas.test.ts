@@ -58,13 +58,26 @@ describe("updateTaskSchema", () => {
     expect(updateTaskSchema.safeParse({}).success).toBe(false);
   });
 
+  it("requires version even when another field is present", () => {
+    expect(updateTaskSchema.safeParse({ status: "done" }).success).toBe(false);
+  });
+
+  it("rejects version-only patches (nothing to actually update)", () => {
+    expect(updateTaskSchema.safeParse({ version: 1 }).success).toBe(false);
+  });
+
+  it("rejects a non-integer or zero version", () => {
+    expect(updateTaskSchema.safeParse({ version: 1.5, status: "done" }).success).toBe(false);
+    expect(updateTaskSchema.safeParse({ version: 0, status: "done" }).success).toBe(false);
+  });
+
   it("allows explicitly clearing the assignee and due date", () => {
-    const result = updateTaskSchema.safeParse({ assigneeId: null, dueAt: null });
+    const result = updateTaskSchema.safeParse({ version: 1, assigneeId: null, dueAt: null });
     expect(result.success).toBe(true);
   });
 
   it("rejects a non-UUID assignee", () => {
-    expect(updateTaskSchema.safeParse({ assigneeId: "nope" }).success).toBe(false);
+    expect(updateTaskSchema.safeParse({ version: 1, assigneeId: "nope" }).success).toBe(false);
   });
 });
 

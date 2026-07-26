@@ -8,7 +8,6 @@ import {
   type CreateTaskInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
-import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler, validateBody, validateParams } from "../middleware/validate.js";
@@ -18,33 +17,36 @@ import {
   requireMembership,
   requireTaskManager,
 } from "../permissions/workspacePermissions.js";
+import {
+  createTask,
+  getActiveTaskById,
+  listTasksAssignedToUser,
+  listTasksForWorkspace,
+  softDeleteTask,
+  updateTaskWithVersionCheck,
+} from "../repositories/taskRepository.js";
+import { findUserById } from "../repositories/userRepository.js";
+import { getWorkspaceById } from "../repositories/workspaceRepository.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
-import type { Task, User, Workspace } from "../types/index.js";
+import type { Task } from "../types/index.js";
 
 export const tasksRouter = Router();
 tasksRouter.use(requireAuth);
 
 async function getTaskOrThrow(taskId: string): Promise<Task> {
-  const { data } = await supabase.from("tasks").select("*").eq("id", taskId).maybeSingle();
-  if (!data) {
+  const task = await getActiveTaskById(taskId);
+  if (!task) {
     throw new ApiError(ERROR_CODES.TASK_NOT_FOUND);
   }
-  return data as Task;
+  return task;
 }
 
 // GET /api/tasks/my — tasks assigned to the current user, across all workspaces
 tasksRouter.get(
   "/my",
   asyncHandler(async (req, res) => {
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*, workspace:workspaces(name)")
-      .eq("assignee_id", req.user!.id)
-      .order("due_at", { ascending: true, nullsFirst: false });
-
-    if (error) throw error;
-
-    res.json({ tasks: data ?? [] });
+    const tasks = await listTasksAssignedToUser(req.user!.id);
+    res.json({ tasks });
   }),
 );
 
@@ -71,23 +73,17 @@ tasksRouter.post(
       await requireAssigneeIsMember(body.workspaceId, body.assigneeId);
     }
 
-    const { data: task, error } = await supabase
-      .from("tasks")
-      .insert({
-        workspace_id: body.workspaceId,
-        title: body.title,
-        description: body.description || null,
-        creator_id: req.user!.id,
-        assignee_id: body.assigneeId ?? null,
-        status: body.status ?? "todo",
-        due_at: body.dueAt ?? null,
-      })
-      .select("*")
-      .single();
+    const task = await createTask({
+      workspace_id: body.workspaceId,
+      title: body.title,
+      description: body.description || null,
+      creator_id: req.user!.id,
+      assignee_id: body.assigneeId ?? null,
+      status: body.status,
+      due_at: body.dueAt ?? null,
+    });
 
-    if (error || !task) throw error ?? new ApiError(ERROR_CODES.INTERNAL);
-
-    await maybeNotifyAssignment(task as Task);
+    await maybeNotifyAssignment(task);
     res.status(201).json({ task });
   }),
 );
@@ -125,27 +121,28 @@ tasksRouter.patch(
       throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Нет данных для обновления" });
     }
 
-    updates.updated_at = new Date().toISOString();
-
-    const { data: updated, error } = await supabase
-      .from("tasks")
-      .update(updates)
-      .eq("id", task.id)
-      .select("*")
-      .single();
-
-    if (error || !updated) throw error ?? new ApiError(ERROR_CODES.INTERNAL);
+    const result = await updateTaskWithVersionCheck(task.id, body.version, updates);
+    if (!result.ok) {
+      // Someone else updated (or deleted) this task between our read and
+      // this write. Re-fetch so the client learns the actual current
+      // version rather than the stale one it already knew was wrong.
+      const current = await getActiveTaskById(task.id);
+      throw new ApiError(ERROR_CODES.TASK_VERSION_CONFLICT, {
+        details: current ? { currentVersion: current.version } : { deleted: true },
+      });
+    }
 
     const assigneeChanged = updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id;
     if (assigneeChanged) {
-      await maybeNotifyAssignment(updated as Task);
+      await maybeNotifyAssignment(result.task);
     }
 
-    res.json({ task: updated });
+    res.json({ task: result.task });
   }),
 );
 
-// DELETE /api/tasks/:id
+// DELETE /api/tasks/:id — soft delete. Restorable until the (future) trash
+// purge job removes it; see docs/ARCHITECTURE_AUDIT.md section 6.
 tasksRouter.delete(
   "/:id",
   validateParams(uuidParamSchema),
@@ -154,8 +151,7 @@ tasksRouter.delete(
     await requireMembership(task.workspace_id, req.user!.id);
     await requireTaskManager(task, req.user!.id);
 
-    const { error } = await supabase.from("tasks").delete().eq("id", task.id);
-    if (error) throw error;
+    await softDeleteTask(task.id);
 
     res.status(204).send();
   }),
@@ -172,28 +168,21 @@ workspaceTasksRouter.get(
     const { workspaceId } = req.params as { workspaceId: string };
     await requireMembership(workspaceId, req.user!.id);
 
-    const { data, error } = await supabase
-      .from("tasks")
-      .select("*")
-      .eq("workspace_id", workspaceId)
-      .order("created_at", { ascending: false });
-
-    if (error) throw error;
-
-    res.json({ tasks: data ?? [] });
+    const tasks = await listTasksForWorkspace(workspaceId);
+    res.json({ tasks });
   }),
 );
 
 async function maybeNotifyAssignment(task: Task): Promise<void> {
   if (!task.assignee_id) return;
 
-  const [{ data: assignee }, { data: workspace }] = await Promise.all([
-    supabase.from("users").select("telegram_id").eq("id", task.assignee_id).single(),
-    supabase.from("workspaces").select("name").eq("id", task.workspace_id).single(),
+  const [assignee, workspace] = await Promise.all([
+    findUserById(task.assignee_id),
+    getWorkspaceById(task.workspace_id),
   ]);
 
-  const telegramId = (assignee as Pick<User, "telegram_id"> | null)?.telegram_id;
-  const workspaceName = (workspace as Pick<Workspace, "name"> | null)?.name;
+  const telegramId = assignee?.telegram_id;
+  const workspaceName = workspace?.name;
   if (!telegramId || !workspaceName) return;
 
   try {

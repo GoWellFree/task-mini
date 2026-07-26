@@ -16,6 +16,7 @@ export const ERROR_CODES = {
   WORKSPACE_ACCESS_DENIED: "WORKSPACE_ACCESS_DENIED",
   TASK_NOT_FOUND: "TASK_NOT_FOUND",
   TASK_ACCESS_DENIED: "TASK_ACCESS_DENIED",
+  TASK_VERSION_CONFLICT: "TASK_VERSION_CONFLICT",
   INVITE_NOT_FOUND: "INVITE_NOT_FOUND",
   ASSIGNEE_NOT_MEMBER: "ASSIGNEE_NOT_MEMBER",
 } as const;
@@ -49,6 +50,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   WORKSPACE_ACCESS_DENIED: "Вы не состоите в этой группе",
   TASK_NOT_FOUND: "Задача не найдена",
   TASK_ACCESS_DENIED: "Нет доступа к этой задаче",
+  TASK_VERSION_CONFLICT: "Задача изменена в другом месте. Обновите страницу и попробуйте снова",
   INVITE_NOT_FOUND: "Приглашение не найдено",
   ASSIGNEE_NOT_MEMBER: "Исполнитель должен быть участником группы",
 };
@@ -70,6 +72,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   WORKSPACE_ACCESS_DENIED: 403,
   TASK_NOT_FOUND: 404,
   TASK_ACCESS_DENIED: 403,
+  TASK_VERSION_CONFLICT: 409,
   INVITE_NOT_FOUND: 404,
   ASSIGNEE_NOT_MEMBER: 400,
 };

@@ -33,13 +33,19 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
 export const updateTaskSchema = z
   .object({
+    // The version the client last read. Required on every PATCH so a write
+    // based on stale data is refused (409 TASK_VERSION_CONFLICT) instead of
+    // silently overwriting a concurrent edit.
+    version: z.number().int().min(1, "Отсутствует версия задачи"),
     title: z.string().trim().min(1).max(TITLE_MAX).optional(),
     description: z.string().trim().max(DESCRIPTION_MAX).nullable().optional(),
     assigneeId: uuid.nullable().optional(),
     status: taskStatus.optional(),
     dueAt: isoDateTime.nullable().optional(),
   })
-  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+  .refine((body) => Object.keys(body).some((key) => key !== "version"), {
+    message: "Нет данных для обновления",
+  });
 export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 
 export const telegramAuthSchema = z.object({

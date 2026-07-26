@@ -43,6 +43,10 @@ export interface Task {
   due_at: string | null;
   created_at: string;
   updated_at: string;
+  /** Incremented on every update; PATCH must supply the version it read, or is refused. */
+  version: number;
+  /** Soft-delete marker. Deleted tasks are excluded from every normal read. */
+  deleted_at: string | null;
 }
 
 /** Task as returned by list endpoints that join the workspace name. */
