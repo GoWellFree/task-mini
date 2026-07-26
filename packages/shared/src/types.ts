@@ -138,6 +138,21 @@ export interface ChecklistItem {
   completed_at: string | null;
 }
 
+export interface TaskComment {
+  id: string;
+  task_id: string;
+  author_id: string;
+  parent_comment_id: string | null;
+  body: string;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+}
+
+export interface TaskCommentWithAuthor extends TaskComment {
+  author: PublicUser;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   telegramId: number;

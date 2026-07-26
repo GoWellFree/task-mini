@@ -1,15 +1,18 @@
 import { describe, expect, it } from "vitest";
 import {
   createChecklistItemSchema,
+  createCommentSchema,
   createLabelSchema,
   createProjectSchema,
   createTaskSchema,
   createWorkspaceSchema,
   updateChecklistItemSchema,
+  updateCommentSchema,
   updateLabelSchema,
   updateProjectSchema,
   updateTaskSchema,
   updateUserSettingsSchema,
+  COMMENT_BODY_MAX,
   TITLE_MAX,
 } from "./schemas.js";
 
@@ -266,5 +269,34 @@ describe("updateChecklistItemSchema", () => {
 
   it("rejects a negative position", () => {
     expect(updateChecklistItemSchema.safeParse({ position: -1 }).success).toBe(false);
+  });
+});
+
+describe("createCommentSchema", () => {
+  it("accepts a body-only comment", () => {
+    expect(createCommentSchema.safeParse({ body: "Готово!" }).success).toBe(true);
+  });
+
+  it("rejects an empty or whitespace-only body", () => {
+    expect(createCommentSchema.safeParse({ body: "" }).success).toBe(false);
+    expect(createCommentSchema.safeParse({ body: "   " }).success).toBe(false);
+  });
+
+  it("rejects a body over the max length", () => {
+    expect(createCommentSchema.safeParse({ body: "x".repeat(COMMENT_BODY_MAX + 1) }).success).toBe(false);
+  });
+
+  it("accepts an optional parentCommentId as a UUID", () => {
+    const validUuid = "11111111-2222-4333-8444-555555555555";
+    expect(createCommentSchema.safeParse({ body: "x", parentCommentId: validUuid }).success).toBe(true);
+    expect(createCommentSchema.safeParse({ body: "x", parentCommentId: "nope" }).success).toBe(false);
+  });
+});
+
+describe("updateCommentSchema", () => {
+  it("requires a non-empty body", () => {
+    expect(updateCommentSchema.safeParse({}).success).toBe(false);
+    expect(updateCommentSchema.safeParse({ body: "" }).success).toBe(false);
+    expect(updateCommentSchema.safeParse({ body: "Отредактировано" }).success).toBe(true);
   });
 });

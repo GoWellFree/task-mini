@@ -4,19 +4,24 @@ import {
   addAssigneeSchema,
   attachLabelSchema,
   createChecklistItemSchema,
+  createCommentSchema,
   createTaskSchema,
   taskAssigneeParamSchema,
   taskChecklistItemParamSchema,
+  taskCommentParamSchema,
   taskLabelParamSchema,
   updateChecklistItemSchema,
+  updateCommentSchema,
   updateTaskSchema,
   uuidParamSchema,
   workspaceIdParamSchema,
   type AddAssigneeInput,
   type AttachLabelInput,
   type CreateChecklistItemInput,
+  type CreateCommentInput,
   type CreateTaskInput,
   type UpdateChecklistItemInput,
+  type UpdateCommentInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
 import { ApiError } from "../lib/apiError.js";
@@ -43,6 +48,7 @@ import { listAssignees } from "../repositories/taskAssigneeRepository.js";
 import { attachLabel, detachLabel, listLabelsForTask } from "../repositories/taskLabelRepository.js";
 import { getLabelById } from "../repositories/labelRepository.js";
 import * as checklistItemRepository from "../repositories/checklistItemRepository.js";
+import * as taskCommentRepository from "../repositories/taskCommentRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
@@ -451,6 +457,90 @@ tasksRouter.delete(
     }
 
     await checklistItemRepository.remove(itemId);
+    res.status(204).send();
+  }),
+);
+
+// GET /api/tasks/:id/comments
+tasksRouter.get(
+  "/:id/comments",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const comments = await taskCommentRepository.listForTask(task.id);
+    res.json({ comments });
+  }),
+);
+
+// POST /api/tasks/:id/comments — a viewer may read but not post, same as
+// creating a task itself.
+tasksRouter.post(
+  "/:id/comments",
+  validateParams(uuidParamSchema),
+  validateBody(createCommentSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireContributor(task.workspace_id, req.user!.id);
+
+    const body = req.body as CreateCommentInput;
+    if (body.parentCommentId) {
+      const parent = await taskCommentRepository.getById(body.parentCommentId);
+      if (!parent || parent.task_id !== task.id) {
+        throw new ApiError(ERROR_CODES.COMMENT_NOT_FOUND, { message: "Комментарий, на который вы отвечаете, не найден" });
+      }
+    }
+
+    const comment = await taskCommentRepository.create(task.id, req.user!.id, body.body, body.parentCommentId ?? null);
+    res.status(201).json({ comment });
+  }),
+);
+
+// PATCH /api/tasks/:id/comments/:commentId — only the author may edit their own comment.
+tasksRouter.patch(
+  "/:id/comments/:commentId",
+  validateParams(taskCommentParamSchema),
+  validateBody(updateCommentSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const { commentId } = req.params as { commentId: string };
+    const existing = await taskCommentRepository.getById(commentId);
+    if (!existing || existing.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.COMMENT_NOT_FOUND);
+    }
+    if (existing.author_id !== req.user!.id) {
+      throw new ApiError(ERROR_CODES.COMMENT_ACCESS_DENIED);
+    }
+
+    const { body } = req.body as UpdateCommentInput;
+    const comment = await taskCommentRepository.updateBody(commentId, body);
+    res.json({ comment });
+  }),
+);
+
+// DELETE /api/tasks/:id/comments/:commentId — the author, or a task manager
+// moderating their workspace, may remove a comment.
+tasksRouter.delete(
+  "/:id/comments/:commentId",
+  validateParams(taskCommentParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const { commentId } = req.params as { commentId: string };
+    const existing = await taskCommentRepository.getById(commentId);
+    if (!existing || existing.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.COMMENT_NOT_FOUND);
+    }
+
+    if (existing.author_id !== req.user!.id) {
+      await requireTaskManager(task, req.user!.id);
+    }
+
+    await taskCommentRepository.softDelete(commentId);
     res.status(204).send();
   }),
 );

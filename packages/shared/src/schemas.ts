@@ -161,8 +161,22 @@ export const updateChecklistItemSchema = z
   .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
 export type UpdateChecklistItemInput = z.infer<typeof updateChecklistItemSchema>;
 
+export const COMMENT_BODY_MAX = 5000;
+
+export const createCommentSchema = z.object({
+  body: z.string().trim().min(1, "Комментарий не может быть пустым").max(COMMENT_BODY_MAX),
+  parentCommentId: uuid.optional(),
+});
+export type CreateCommentInput = z.infer<typeof createCommentSchema>;
+
+export const updateCommentSchema = z.object({
+  body: z.string().trim().min(1, "Комментарий не может быть пустым").max(COMMENT_BODY_MAX),
+});
+export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });
 export const taskAssigneeParamSchema = z.object({ id: uuid, userId: uuid });
 export const taskLabelParamSchema = z.object({ id: uuid, labelId: uuid });
 export const taskChecklistItemParamSchema = z.object({ id: uuid, itemId: uuid });
+export const taskCommentParamSchema = z.object({ id: uuid, commentId: uuid });

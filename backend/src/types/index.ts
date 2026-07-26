@@ -9,6 +9,8 @@ export type {
   Task,
   TaskAssignee,
   TaskAssigneeWithUser,
+  TaskComment,
+  TaskCommentWithAuthor,
   TaskStatus,
   TaskWithWorkspace,
   User,

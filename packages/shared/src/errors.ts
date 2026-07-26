@@ -24,6 +24,8 @@ export const ERROR_CODES = {
   LABEL_NOT_FOUND: "LABEL_NOT_FOUND",
   LABEL_NAME_TAKEN: "LABEL_NAME_TAKEN",
   CHECKLIST_ITEM_NOT_FOUND: "CHECKLIST_ITEM_NOT_FOUND",
+  COMMENT_NOT_FOUND: "COMMENT_NOT_FOUND",
+  COMMENT_ACCESS_DENIED: "COMMENT_ACCESS_DENIED",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -63,6 +65,8 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   LABEL_NOT_FOUND: "Метка не найдена",
   LABEL_NAME_TAKEN: "Метка с таким названием уже существует",
   CHECKLIST_ITEM_NOT_FOUND: "Пункт чек-листа не найден",
+  COMMENT_NOT_FOUND: "Комментарий не найден",
+  COMMENT_ACCESS_DENIED: "Вы можете изменять только свои комментарии",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -90,4 +94,6 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   LABEL_NOT_FOUND: 404,
   LABEL_NAME_TAKEN: 409,
   CHECKLIST_ITEM_NOT_FOUND: 404,
+  COMMENT_NOT_FOUND: 404,
+  COMMENT_ACCESS_DENIED: 403,
 };
