@@ -7,11 +7,11 @@ import {
   type TelegramAuthInput,
 } from "@task-mini/shared";
 import { env } from "../lib/env.js";
-import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
 import { verifyTelegramInitData } from "../lib/telegramAuth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler, validateBody } from "../middleware/validate.js";
+import { findUserByTelegramId, upsertUserByTelegramId } from "../repositories/userRepository.js";
 import {
   createSession,
   listActiveSessions,
@@ -29,38 +29,10 @@ async function findOrCreateUser(input: {
   first_name: string;
   last_name?: string;
 }): Promise<User> {
-  const { data: existing } = await supabase
-    .from("users")
-    .select("*")
-    .eq("telegram_id", input.telegram_id)
-    .maybeSingle();
+  const existing = await findUserByTelegramId(input.telegram_id);
+  if (existing) return existing;
 
-  if (existing) {
-    return existing as User;
-  }
-
-  // Upsert instead of plain insert: if two requests race to create the same
-  // telegram_id (e.g. React StrictMode double-invoking the auth call in dev),
-  // this resolves the conflict instead of throwing a duplicate-key error.
-  const { data: created, error } = await supabase
-    .from("users")
-    .upsert(
-      {
-        telegram_id: input.telegram_id,
-        username: input.username ?? null,
-        first_name: input.first_name,
-        last_name: input.last_name ?? null,
-      },
-      { onConflict: "telegram_id" },
-    )
-    .select("*")
-    .single();
-
-  if (error || !created) {
-    throw error ?? new ApiError(ERROR_CODES.INTERNAL, { message: "Не удалось создать пользователя" });
-  }
-
-  return created as User;
+  return upsertUserByTelegramId(input);
 }
 
 authRouter.post(

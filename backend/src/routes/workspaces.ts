@@ -1,32 +1,20 @@
-import { randomBytes } from "node:crypto";
 import { Router } from "express";
 import { ERROR_CODES, createWorkspaceSchema, uuidParamSchema, type CreateWorkspaceInput } from "@task-mini/shared";
-import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler, validateBody, validateParams } from "../middleware/validate.js";
-import { requireMembership } from "../permissions/workspacePermissions.js";
-import type { Workspace, WorkspaceMemberWithUser } from "../types/index.js";
+import { getMembership, requireMembership } from "../permissions/workspacePermissions.js";
+import * as workspaceRepository from "../repositories/workspaceRepository.js";
+import { createWorkspaceWithOwner } from "../services/workspaceService.js";
 
 export const workspacesRouter = Router();
 workspacesRouter.use(requireAuth);
-
-function generateInviteCode(): string {
-  return randomBytes(6).toString("hex");
-}
 
 // GET /api/workspaces — workspaces the current user belongs to
 workspacesRouter.get(
   "/",
   asyncHandler(async (req, res) => {
-    const { data, error } = await supabase
-      .from("workspace_members")
-      .select("workspace:workspaces(*)")
-      .eq("user_id", req.user!.id);
-
-    if (error) throw error;
-
-    const workspaces = (data ?? []).map((row) => row.workspace).filter(Boolean) as unknown as Workspace[];
+    const workspaces = await workspaceRepository.listWorkspacesForUser(req.user!.id);
     res.json({ workspaces });
   }),
 );
@@ -37,22 +25,8 @@ workspacesRouter.post(
   validateBody(createWorkspaceSchema),
   asyncHandler(async (req, res) => {
     const { name } = req.body as CreateWorkspaceInput;
-
-    const { data: workspace, error } = await supabase
-      .from("workspaces")
-      .insert({ name, owner_id: req.user!.id, invite_code: generateInviteCode() })
-      .select("*")
-      .single();
-
-    if (error || !workspace) throw error ?? new ApiError(ERROR_CODES.INTERNAL);
-
-    const { error: memberError } = await supabase
-      .from("workspace_members")
-      .insert({ workspace_id: workspace.id, user_id: req.user!.id, role: "owner" });
-
-    if (memberError) throw memberError;
-
-    res.status(201).json({ workspace: workspace as Workspace });
+    const workspace = await createWorkspaceWithOwner(name, req.user!.id);
+    res.status(201).json({ workspace });
   }),
 );
 
@@ -64,12 +38,12 @@ workspacesRouter.get(
     const id = req.params.id as string;
     await requireMembership(id, req.user!.id);
 
-    const { data } = await supabase.from("workspaces").select("*").eq("id", id).maybeSingle();
-    if (!data) {
+    const workspace = await workspaceRepository.getWorkspaceById(id);
+    if (!workspace) {
       throw new ApiError(ERROR_CODES.WORKSPACE_NOT_FOUND);
     }
 
-    res.json({ workspace: data as Workspace });
+    res.json({ workspace });
   }),
 );
 
@@ -81,14 +55,8 @@ workspacesRouter.get(
     const id = req.params.id as string;
     await requireMembership(id, req.user!.id);
 
-    const { data, error } = await supabase
-      .from("workspace_members")
-      .select("*, user:users(id, username, first_name, last_name, telegram_id)")
-      .eq("workspace_id", id);
-
-    if (error) throw error;
-
-    res.json({ members: (data ?? []) as unknown as WorkspaceMemberWithUser[] });
+    const members = await workspaceRepository.getWorkspaceMembers(id);
+    res.json({ members });
   }),
 );
 
@@ -98,34 +66,17 @@ workspacesRouter.post(
   asyncHandler(async (req, res) => {
     const { inviteCode } = req.params as { inviteCode: string };
 
-    const { data: workspace } = await supabase
-      .from("workspaces")
-      .select("*")
-      .eq("invite_code", inviteCode)
-      .maybeSingle();
-
+    const workspace = await workspaceRepository.findWorkspaceByInviteCode(inviteCode);
     if (!workspace) {
       throw new ApiError(ERROR_CODES.INVITE_NOT_FOUND);
     }
 
-    const { data: existing } = await supabase
-      .from("workspace_members")
-      .select("id")
-      .eq("workspace_id", workspace.id)
-      .eq("user_id", req.user!.id)
-      .maybeSingle();
-
-    if (existing) {
-      res.json({ workspace: workspace as Workspace });
+    if (await getMembership(workspace.id, req.user!.id)) {
+      res.json({ workspace });
       return;
     }
 
-    const { error: joinError } = await supabase
-      .from("workspace_members")
-      .insert({ workspace_id: workspace.id, user_id: req.user!.id, role: "member" });
-
-    if (joinError) throw joinError;
-
-    res.status(201).json({ workspace: workspace as Workspace });
+    await workspaceRepository.addMember(workspace.id, req.user!.id, "member");
+    res.status(201).json({ workspace });
   }),
 );

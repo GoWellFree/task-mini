@@ -1,9 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { ERROR_CODES } from "@task-mini/shared";
 import { verifyAuthToken } from "../lib/jwt.js";
-import { supabase } from "../lib/supabase.js";
 import { ApiError } from "../lib/apiError.js";
-import type { User } from "../types/index.js";
+import { findUserById } from "../repositories/userRepository.js";
 
 export async function requireAuth(req: Request, _res: Response, next: NextFunction): Promise<void> {
   const header = req.headers.authorization;
@@ -16,14 +15,14 @@ export async function requireAuth(req: Request, _res: Response, next: NextFuncti
 
   try {
     const payload = verifyAuthToken(token);
-    const { data } = await supabase.from("users").select("*").eq("id", payload.userId).maybeSingle();
+    const user = await findUserById(payload.userId);
 
-    if (!data) {
+    if (!user) {
       next(new ApiError(ERROR_CODES.UNAUTHORIZED, { message: "Пользователь не найден" }));
       return;
     }
 
-    req.user = data as User;
+    req.user = user;
     next();
   } catch {
     next(new ApiError(ERROR_CODES.UNAUTHORIZED, { message: "Недействительный или истёкший токен" }));
