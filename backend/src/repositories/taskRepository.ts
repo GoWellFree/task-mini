@@ -41,6 +41,11 @@ export interface NewTaskInput {
   assignee_id: string | null;
   status?: TaskStatus;
   due_at: string | null;
+  project_id?: string | null;
+  parent_task_id?: string | null;
+  priority?: Task["priority"];
+  start_at?: string | null;
+  estimate_minutes?: number | null;
 }
 
 export async function createTask(input: NewTaskInput): Promise<Task> {
@@ -52,6 +57,43 @@ export async function createTask(input: NewTaskInput): Promise<Task> {
 
   if (error || !data) throw error ?? new Error("Insert returned no row");
   return data as Task;
+}
+
+const MAX_PARENT_CHAIN_DEPTH = 50;
+
+/**
+ * Would setting `task.parent_task_id = newParentId` create a cycle? True for
+ * the trivial self-parent case, and for the general case where `taskId` is
+ * already an ancestor of `newParentId` — walking up newParentId's own parent
+ * chain and finding taskId means newParentId is presently reachable by
+ * walking down FROM taskId, so linking it back the other way would close a
+ * loop. Bounded rather than recursive without limit, in case of any
+ * pre-existing bad data.
+ */
+export async function wouldCreateCycle(taskId: string, newParentId: string): Promise<boolean> {
+  if (taskId === newParentId) return true;
+
+  let currentId: string | null = newParentId;
+  for (let i = 0; i < MAX_PARENT_CHAIN_DEPTH && currentId !== null; i++) {
+    const result = await supabase.from("tasks").select("parent_task_id").eq("id", currentId).maybeSingle();
+    const row = result.data as { parent_task_id: string | null } | null;
+    const parentId: string | null = row?.parent_task_id ?? null;
+    if (parentId === taskId) return true;
+    currentId = parentId;
+  }
+  return false;
+}
+
+export async function listSubtasks(parentTaskId: string): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("parent_task_id", parentTaskId)
+    .is("deleted_at", null)
+    .order("position", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []) as Task[];
 }
 
 export type VersionedUpdateResult =

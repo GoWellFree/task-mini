@@ -21,11 +21,14 @@ import {
 import {
   createTask,
   getActiveTaskById,
+  listSubtasks,
   listTasksAssignedToUser,
   listTasksForWorkspace,
   softDeleteTask,
   updateTaskWithVersionCheck,
+  wouldCreateCycle,
 } from "../repositories/taskRepository.js";
+import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
@@ -40,6 +43,27 @@ async function getTaskOrThrow(taskId: string): Promise<Task> {
     throw new ApiError(ERROR_CODES.TASK_NOT_FOUND);
   }
   return task;
+}
+
+/** A project can only be attached to tasks in the same workspace it belongs to. */
+async function requireProjectInWorkspace(workspaceId: string, projectId: string): Promise<void> {
+  const project = await getProjectById(projectId);
+  if (!project || project.workspace_id !== workspaceId) {
+    throw new ApiError(ERROR_CODES.PROJECT_NOT_FOUND);
+  }
+}
+
+/** A parent task must exist, be in the same workspace, and not create a cycle. */
+async function requireValidParent(workspaceId: string, taskId: string | null, parentTaskId: string): Promise<void> {
+  const parent = await getActiveTaskById(parentTaskId);
+  if (!parent || parent.workspace_id !== workspaceId) {
+    throw new ApiError(ERROR_CODES.TASK_NOT_FOUND, { message: "Родительская задача не найдена" });
+  }
+  if (taskId && (await wouldCreateCycle(taskId, parentTaskId))) {
+    throw new ApiError(ERROR_CODES.VALIDATION_FAILED, {
+      message: "Нельзя сделать задачу подзадачей самой себя или своего потомка",
+    });
+  }
 }
 
 // GET /api/tasks/my — tasks assigned to the current user, across all workspaces
@@ -62,6 +86,19 @@ tasksRouter.get(
   }),
 );
 
+// GET /api/tasks/:id/subtasks
+tasksRouter.get(
+  "/:id/subtasks",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const subtasks = await listSubtasks(task.id);
+    res.json({ subtasks });
+  }),
+);
+
 // POST /api/tasks
 tasksRouter.post(
   "/",
@@ -73,6 +110,13 @@ tasksRouter.post(
     if (body.assigneeId) {
       await requireAssigneeIsMember(body.workspaceId, body.assigneeId);
     }
+    if (body.projectId) {
+      await requireProjectInWorkspace(body.workspaceId, body.projectId);
+    }
+    if (body.parentTaskId) {
+      // No cycle check needed here — a brand-new task can't yet be anyone's ancestor.
+      await requireValidParent(body.workspaceId, null, body.parentTaskId);
+    }
 
     const task = await createTask({
       workspace_id: body.workspaceId,
@@ -82,6 +126,11 @@ tasksRouter.post(
       assignee_id: body.assigneeId ?? null,
       status: body.status,
       due_at: body.dueAt ?? null,
+      project_id: body.projectId ?? null,
+      parent_task_id: body.parentTaskId ?? null,
+      priority: body.priority,
+      start_at: body.startAt ?? null,
+      estimate_minutes: body.estimateMinutes ?? null,
     });
 
     await maybeNotifyAssignment(task);
@@ -114,9 +163,33 @@ tasksRouter.patch(
         }
         updates.assignee_id = body.assigneeId;
       }
+      if (body.projectId !== undefined) {
+        if (body.projectId) {
+          await requireProjectInWorkspace(task.workspace_id, body.projectId);
+        }
+        updates.project_id = body.projectId;
+      }
+      if (body.parentTaskId !== undefined) {
+        if (body.parentTaskId) {
+          await requireValidParent(task.workspace_id, task.id, body.parentTaskId);
+        }
+        updates.parent_task_id = body.parentTaskId;
+      }
+      if (body.priority !== undefined) updates.priority = body.priority;
+      if (body.startAt !== undefined) updates.start_at = body.startAt;
+      if (body.estimateMinutes !== undefined) updates.estimate_minutes = body.estimateMinutes;
+      if (body.actualMinutes !== undefined) updates.actual_minutes = body.actualMinutes;
+      if (body.position !== undefined) updates.position = body.position;
+      if (body.archived !== undefined) updates.archived_at = body.archived ? new Date().toISOString() : null;
     }
 
-    if (body.status !== undefined) updates.status = body.status;
+    if (body.status !== undefined) {
+      updates.status = body.status;
+      // completed_at tracks entry into 'done' specifically — leaving it is
+      // possible (reopening a task), so it's cleared again rather than left
+      // stamped with a stale completion time.
+      updates.completed_at = body.status === "done" ? new Date().toISOString() : null;
+    }
 
     if (Object.keys(updates).length === 0) {
       throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Нет данных для обновления" });

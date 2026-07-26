@@ -60,7 +60,9 @@ vi.mock("../lib/supabase.js", () => {
   return { supabase: { from: () => builder() } };
 });
 
-const { getActiveTaskById, softDeleteTask, updateTaskWithVersionCheck } = await import("./taskRepository.js");
+const { getActiveTaskById, softDeleteTask, updateTaskWithVersionCheck, wouldCreateCycle } = await import(
+  "./taskRepository.js"
+);
 
 beforeEach(() => {
   db.tasks = [{ id: "task-1", version: 1, deleted_at: null, status: "todo", title: "Original" }];
@@ -121,6 +123,42 @@ describe("updateTaskWithVersionCheck", () => {
     expect(winners).toHaveLength(1);
     expect(losers).toHaveLength(1);
     expect(losers[0]).toEqual({ ok: false, reason: "version_conflict" });
+  });
+});
+
+describe("wouldCreateCycle", () => {
+  beforeEach(() => {
+    // A -> B -> C (A.parent_task_id = B, B.parent_task_id = C): C is B's
+    // parent, B is A's parent.
+    db.tasks = [
+      { id: "A", version: 1, deleted_at: null, parent_task_id: "B" },
+      { id: "B", version: 1, deleted_at: null, parent_task_id: "C" },
+      { id: "C", version: 1, deleted_at: null, parent_task_id: null },
+      { id: "D", version: 1, deleted_at: null, parent_task_id: null }, // unrelated
+    ];
+  });
+
+  it("flags the trivial self-parent case", async () => {
+    expect(await wouldCreateCycle("A", "A")).toBe(true);
+  });
+
+  it("allows attaching to an unrelated task", async () => {
+    expect(await wouldCreateCycle("A", "D")).toBe(false);
+  });
+
+  it("allows extending the existing chain further (D becomes C's parent)", async () => {
+    expect(await wouldCreateCycle("C", "D")).toBe(false);
+  });
+
+  it("flags a direct cycle: C (an ancestor of A) taking A as its parent", async () => {
+    // A -> B -> C already; setting C.parent_task_id = A would close the loop.
+    expect(await wouldCreateCycle("C", "A")).toBe(true);
+  });
+
+  it("flags the reverse of an existing direct link: B taking A as its parent", async () => {
+    // A -> B already (B is A's parent). Also setting B.parent_task_id = A
+    // would close a 2-node loop: A's parent is B, and B's parent is A.
+    expect(await wouldCreateCycle("B", "A")).toBe(true);
   });
 });
 

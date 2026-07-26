@@ -1,4 +1,4 @@
-import type { ProjectStatus, TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
+import type { ProjectStatus, TaskPriority, TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
 
 export interface User {
   id: string;
@@ -89,6 +89,18 @@ export interface Task {
   version: number;
   /** Soft-delete marker. Deleted tasks are excluded from every normal read. */
   deleted_at: string | null;
+  project_id: string | null;
+  /** Self-reference for subtasks. */
+  parent_task_id: string | null;
+  priority: TaskPriority;
+  start_at: string | null;
+  /** Set automatically when status becomes 'done', cleared when it moves away from it. */
+  completed_at: string | null;
+  estimate_minutes: number | null;
+  actual_minutes: number | null;
+  position: number;
+  /** Archived tasks stay out of normal views but, unlike deleted_at, are not headed for deletion. */
+  archived_at: string | null;
 }
 
 /** Task as returned by list endpoints that join the workspace name. */

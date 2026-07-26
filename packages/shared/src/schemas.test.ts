@@ -59,6 +59,36 @@ describe("createTaskSchema", () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it("accepts a valid priority and rejects one outside the supported set", () => {
+    expect(createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", priority: "urgent" }).success).toBe(
+      true,
+    );
+    expect(createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", priority: "critical" }).success).toBe(
+      false,
+    );
+  });
+
+  it("rejects a negative or absurdly large estimate", () => {
+    expect(createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", estimateMinutes: -1 }).success).toBe(
+      false,
+    );
+    expect(
+      createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", estimateMinutes: 60 * 24 * 365 }).success,
+    ).toBe(false);
+    expect(createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", estimateMinutes: 90 }).success).toBe(
+      true,
+    );
+  });
+
+  it("accepts optional projectId/parentTaskId as UUIDs", () => {
+    expect(
+      createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", projectId: VALID_UUID }).success,
+    ).toBe(true);
+    expect(createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", projectId: "nope" }).success).toBe(
+      false,
+    );
+  });
 });
 
 describe("updateTaskSchema", () => {
@@ -86,6 +116,15 @@ describe("updateTaskSchema", () => {
 
   it("rejects a non-UUID assignee", () => {
     expect(updateTaskSchema.safeParse({ version: 1, assigneeId: "nope" }).success).toBe(false);
+  });
+
+  it("allows archiving/unarchiving independently of status", () => {
+    expect(updateTaskSchema.safeParse({ version: 1, archived: true }).success).toBe(true);
+    expect(updateTaskSchema.safeParse({ version: 1, archived: false }).success).toBe(true);
+  });
+
+  it("allows clearing projectId and parentTaskId", () => {
+    expect(updateTaskSchema.safeParse({ version: 1, projectId: null, parentTaskId: null }).success).toBe(true);
   });
 });
 

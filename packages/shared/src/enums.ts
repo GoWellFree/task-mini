@@ -16,8 +16,11 @@ export type WorkspaceRole = (typeof WORKSPACE_ROLE_VALUES)[number];
 export const WORKSPACE_TYPE_VALUES = ["personal", "team", "family", "education", "other"] as const;
 export type WorkspaceType = (typeof WORKSPACE_TYPE_VALUES)[number];
 
-export const TASK_STATUS_VALUES = ["todo", "in_progress", "done"] as const;
+export const TASK_STATUS_VALUES = ["inbox", "todo", "in_progress", "waiting", "review", "done", "cancelled"] as const;
 export type TaskStatus = (typeof TASK_STATUS_VALUES)[number];
+
+export const TASK_PRIORITY_VALUES = ["none", "low", "medium", "high", "urgent"] as const;
+export type TaskPriority = (typeof TASK_PRIORITY_VALUES)[number];
 
 export const PROJECT_STATUS_VALUES = ["planning", "active", "paused", "completed", "archived"] as const;
 export type ProjectStatus = (typeof PROJECT_STATUS_VALUES)[number];

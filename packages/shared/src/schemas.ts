@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { PROJECT_STATUS_VALUES, TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
+import { PROJECT_STATUS_VALUES, TASK_PRIORITY_VALUES, TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
 
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 5000;
@@ -19,6 +19,10 @@ const isoDateTime = z
   .refine((value) => !Number.isNaN(Date.parse(value)), { message: "Некорректная дата" });
 
 const taskStatus = z.enum(TASK_STATUS_VALUES);
+const taskPriority = z.enum(TASK_PRIORITY_VALUES);
+/** Generous upper bound just to catch obviously-wrong input (~30 days). */
+const MAX_MINUTES = 60 * 24 * 30;
+const minutesField = z.number().int().min(0).max(MAX_MINUTES);
 
 export const createWorkspaceSchema = z.object({
   name: z.string().trim().min(1, "Укажите название группы").max(WORKSPACE_NAME_MAX),
@@ -32,6 +36,11 @@ export const createTaskSchema = z.object({
   assigneeId: uuid.optional(),
   status: taskStatus.optional(),
   dueAt: isoDateTime.optional(),
+  projectId: uuid.optional(),
+  parentTaskId: uuid.optional(),
+  priority: taskPriority.optional(),
+  startAt: isoDateTime.optional(),
+  estimateMinutes: minutesField.optional(),
 });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
@@ -46,6 +55,15 @@ export const updateTaskSchema = z
     assigneeId: uuid.nullable().optional(),
     status: taskStatus.optional(),
     dueAt: isoDateTime.nullable().optional(),
+    projectId: uuid.nullable().optional(),
+    parentTaskId: uuid.nullable().optional(),
+    priority: taskPriority.optional(),
+    startAt: isoDateTime.nullable().optional(),
+    estimateMinutes: minutesField.nullable().optional(),
+    actualMinutes: minutesField.nullable().optional(),
+    position: z.number().int().min(0).optional(),
+    /** Archive/unarchive — independent of status, mirrors projects. */
+    archived: z.boolean().optional(),
   })
   .refine((body) => Object.keys(body).some((key) => key !== "version"), {
     message: "Нет данных для обновления",
