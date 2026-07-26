@@ -17,7 +17,7 @@
     "typecheck:frontend": "npm run build:shared && npm --workspace frontend run typecheck",
     "typecheck:backend": "npm run build:shared && npm --workspace backend run typecheck",
     "lint": "npm --workspace @task-mini/shared run lint && npm --workspace backend run lint && npm --workspace frontend run lint",
-    "test": "npm --workspace @task-mini/shared run test && npm --workspace backend run test",
+    "test": "npm --workspace @task-mini/shared run test && npm --workspace backend run test && npm run build:shared && npm --workspace frontend run test",
     "migrate": "node scripts/migrate.mjs",
     "migrate:status": "node scripts/migrate.mjs --status",
     "migrate:dry-run": "node scripts/migrate.mjs --dry-run"
