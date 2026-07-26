@@ -136,3 +136,20 @@ export async function softDeleteTask(id: string): Promise<void> {
 
   if (error) throw error;
 }
+
+/**
+ * Mirrors tasks.assignee_id to reflect the current task_assignees set, for
+ * callers that predate multiple assignees (see taskAssignmentService).
+ * Deliberately does not go through the optimistic-locking path: this is a
+ * side effect of an assignment change, not a competing edit to the fields
+ * that flow guards, and requiring every caller to carry a task version
+ * would make simple assign/unassign calls needlessly heavy.
+ */
+export async function setAssigneeId(id: string, assigneeId: string | null): Promise<void> {
+  const { error } = await supabase
+    .from("tasks")
+    .update({ assignee_id: assigneeId, updated_at: new Date().toISOString() })
+    .eq("id", id);
+
+  if (error) throw error;
+}

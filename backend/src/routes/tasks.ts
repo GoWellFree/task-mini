@@ -1,10 +1,13 @@
 import { Router } from "express";
 import {
   ERROR_CODES,
+  addAssigneeSchema,
   createTaskSchema,
+  taskAssigneeParamSchema,
   updateTaskSchema,
   uuidParamSchema,
   workspaceIdParamSchema,
+  type AddAssigneeInput,
   type CreateTaskInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
@@ -28,9 +31,11 @@ import {
   updateTaskWithVersionCheck,
   wouldCreateCycle,
 } from "../repositories/taskRepository.js";
+import { listAssignees } from "../repositories/taskAssigneeRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
+import * as taskAssignmentService from "../services/taskAssignmentService.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
 import type { Task } from "../types/index.js";
 
@@ -133,6 +138,10 @@ tasksRouter.post(
       estimate_minutes: body.estimateMinutes ?? null,
     });
 
+    if (body.assigneeId) {
+      await taskAssignmentService.setSingleAssignee(task.id, body.assigneeId, req.user!.id);
+    }
+
     await maybeNotifyAssignment(task);
     res.status(201).json({ task });
   }),
@@ -208,10 +217,76 @@ tasksRouter.patch(
 
     const assigneeChanged = updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id;
     if (assigneeChanged) {
+      // The legacy single-assignee field just changed via the general PATCH
+      // path — replace the whole task_assignees set to match so a reader
+      // using either model sees the same answer (see taskAssignmentService).
+      await taskAssignmentService.setSingleAssignee(task.id, updates.assignee_id ?? null, req.user!.id);
       await maybeNotifyAssignment(result.task);
     }
 
     res.json({ task: result.task });
+  }),
+);
+
+// GET /api/tasks/:id/assignees
+tasksRouter.get(
+  "/:id/assignees",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const assignees = await listAssignees(task.id);
+    res.json({ assignees });
+  }),
+);
+
+// POST /api/tasks/:id/assignees — add one more assignee without disturbing existing ones.
+tasksRouter.post(
+  "/:id/assignees",
+  validateParams(uuidParamSchema),
+  validateBody(addAssigneeSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { userId } = req.body as AddAssigneeInput;
+    await requireAssigneeIsMember(task.workspace_id, userId);
+
+    await taskAssignmentService.addAssignee(task.id, userId, req.user!.id);
+
+    const assignee = await findUserById(userId);
+    if (assignee) {
+      try {
+        await notifyTaskAssigned({
+          assigneeTelegramId: assignee.telegram_id,
+          task,
+          workspaceName: (await getWorkspaceById(task.workspace_id))?.name ?? "",
+        });
+      } catch (err) {
+        console.error("Failed to send Telegram notification:", err);
+      }
+    }
+
+    const assignees = await listAssignees(task.id);
+    res.status(201).json({ assignees });
+  }),
+);
+
+// DELETE /api/tasks/:id/assignees/:userId
+tasksRouter.delete(
+  "/:id/assignees/:userId",
+  validateParams(taskAssigneeParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { userId } = req.params as { userId: string };
+    await taskAssignmentService.removeAssignee(task.id, userId, task.assignee_id);
+
+    res.status(204).send();
   }),
 );
 

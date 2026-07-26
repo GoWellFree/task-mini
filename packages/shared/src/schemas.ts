@@ -126,5 +126,9 @@ export const updateProjectSchema = z
   .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
 export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
 
+export const addAssigneeSchema = z.object({ userId: uuid });
+export type AddAssigneeInput = z.infer<typeof addAssigneeSchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });
+export const taskAssigneeParamSchema = z.object({ id: uuid, userId: uuid });

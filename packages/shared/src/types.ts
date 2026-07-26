@@ -108,6 +108,18 @@ export interface TaskWithWorkspace extends Task {
   workspace?: { name: string };
 }
 
+export interface TaskAssignee {
+  id: string;
+  task_id: string;
+  user_id: string;
+  assigned_at: string;
+  assigned_by: string | null;
+}
+
+export interface TaskAssigneeWithUser extends TaskAssignee {
+  user: PublicUser;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   telegramId: number;

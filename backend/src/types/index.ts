@@ -5,6 +5,8 @@ export type {
   Project,
   PublicUser,
   Task,
+  TaskAssignee,
+  TaskAssigneeWithUser,
   TaskStatus,
   TaskWithWorkspace,
   User,
