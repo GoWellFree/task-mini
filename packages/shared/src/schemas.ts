@@ -1,5 +1,11 @@
 import { z } from "zod";
-import { PROJECT_STATUS_VALUES, TASK_PRIORITY_VALUES, TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
+import {
+  PROJECT_STATUS_VALUES,
+  RECURRENCE_RULE_VALUES,
+  TASK_PRIORITY_VALUES,
+  TASK_STATUS_VALUES,
+  THEME_VALUES,
+} from "./enums.js";
 
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 5000;
@@ -25,24 +31,36 @@ const taskPriority = z.enum(TASK_PRIORITY_VALUES);
 const MAX_MINUTES = 60 * 24 * 30;
 const minutesField = z.number().int().min(0).max(MAX_MINUTES);
 
+const recurrenceRule = z.enum(RECURRENCE_RULE_VALUES);
+/** Generous upper bound just to catch obviously-wrong input (e.g. "every 5000 days"). */
+const recurrenceInterval = z.number().int().min(1).max(365);
+
 export const createWorkspaceSchema = z.object({
   name: z.string().trim().min(1, "Укажите название группы").max(WORKSPACE_NAME_MAX),
 });
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 
-export const createTaskSchema = z.object({
-  workspaceId: uuid,
-  title: z.string().trim().min(1, "Укажите название задачи").max(TITLE_MAX),
-  description: z.string().trim().max(DESCRIPTION_MAX).optional(),
-  assigneeId: uuid.optional(),
-  status: taskStatus.optional(),
-  dueAt: isoDateTime.optional(),
-  projectId: uuid.optional(),
-  parentTaskId: uuid.optional(),
-  priority: taskPriority.optional(),
-  startAt: isoDateTime.optional(),
-  estimateMinutes: minutesField.optional(),
-});
+export const createTaskSchema = z
+  .object({
+    workspaceId: uuid,
+    title: z.string().trim().min(1, "Укажите название задачи").max(TITLE_MAX),
+    description: z.string().trim().max(DESCRIPTION_MAX).optional(),
+    assigneeId: uuid.optional(),
+    status: taskStatus.optional(),
+    dueAt: isoDateTime.optional(),
+    projectId: uuid.optional(),
+    parentTaskId: uuid.optional(),
+    priority: taskPriority.optional(),
+    startAt: isoDateTime.optional(),
+    estimateMinutes: minutesField.optional(),
+    recurrenceRule: recurrenceRule.optional(),
+    recurrenceInterval: recurrenceInterval.optional(),
+    recurrenceUntil: isoDateTime.optional(),
+  })
+  .refine((body) => !body.recurrenceRule || body.dueAt, {
+    message: "Для повторяющейся задачи нужен срок выполнения",
+    path: ["dueAt"],
+  });
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 
 export const updateTaskSchema = z
@@ -65,6 +83,13 @@ export const updateTaskSchema = z
     position: z.number().int().min(0).optional(),
     /** Archive/unarchive — independent of status, mirrors projects. */
     archived: z.boolean().optional(),
+    // recurrenceRule: null clears recurrence. Whether the *effective* due_at
+    // (this update's, or else the task's existing one) is required when a
+    // rule is set can't be expressed here — PATCH is partial, so the route
+    // checks that against the task's current state instead.
+    recurrenceRule: recurrenceRule.nullable().optional(),
+    recurrenceInterval: recurrenceInterval.optional(),
+    recurrenceUntil: isoDateTime.nullable().optional(),
   })
   .refine((body) => Object.keys(body).some((key) => key !== "version"), {
     message: "Нет данных для обновления",

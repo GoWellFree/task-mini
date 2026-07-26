@@ -1,4 +1,4 @@
-import type { ProjectStatus, TaskPriority, TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
+import type { ProjectStatus, RecurrenceRule, TaskPriority, TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
 
 export interface User {
   id: string;
@@ -101,6 +101,11 @@ export interface Task {
   position: number;
   /** Archived tasks stay out of normal views but, unlike deleted_at, are not headed for deletion. */
   archived_at: string | null;
+  /** Null means "does not recur". Set, completing the task rolls it to its next occurrence instead of finishing it. */
+  recurrence_rule: RecurrenceRule | null;
+  recurrence_interval: number;
+  /** Once the next occurrence would fall after this, completing the task finishes it normally instead of rolling further. */
+  recurrence_until: string | null;
 }
 
 /** Task as returned by list endpoints that join the workspace name. */
@@ -118,6 +123,13 @@ export interface TaskAssignee {
 
 export interface TaskAssigneeWithUser extends TaskAssignee {
   user: PublicUser;
+}
+
+/** Records that a due-date reminder was already sent to this recipient for this task, so the worker never double-sends. */
+export interface TaskReminder {
+  task_id: string;
+  user_id: string;
+  sent_at: string;
 }
 
 export interface Label {

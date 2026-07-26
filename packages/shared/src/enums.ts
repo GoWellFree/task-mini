@@ -27,3 +27,7 @@ export type ProjectStatus = (typeof PROJECT_STATUS_VALUES)[number];
 
 export const THEME_VALUES = ["system", "light", "dark"] as const;
 export type Theme = (typeof THEME_VALUES)[number];
+
+/** Completing a recurring task rolls the same row to its next occurrence rather than spawning a new one. */
+export const RECURRENCE_RULE_VALUES = ["daily", "weekly", "monthly", "yearly"] as const;
+export type RecurrenceRule = (typeof RECURRENCE_RULE_VALUES)[number];

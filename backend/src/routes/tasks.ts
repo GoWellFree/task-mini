@@ -54,7 +54,9 @@ import * as taskCommentRepository from "../repositories/taskCommentRepository.js
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
+import * as reminderRepository from "../repositories/reminderRepository.js";
 import * as taskAssignmentService from "../services/taskAssignmentService.js";
+import { applyRecurrenceOnCompletion } from "../services/recurrenceService.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
 import type { Task } from "../types/index.js";
 
@@ -173,6 +175,9 @@ tasksRouter.post(
       priority: body.priority,
       start_at: body.startAt ?? null,
       estimate_minutes: body.estimateMinutes ?? null,
+      recurrence_rule: body.recurrenceRule ?? null,
+      recurrence_interval: body.recurrenceInterval,
+      recurrence_until: body.recurrenceUntil ?? null,
     });
 
     if (body.assigneeId) {
@@ -227,6 +232,9 @@ tasksRouter.patch(
       if (body.actualMinutes !== undefined) updates.actual_minutes = body.actualMinutes;
       if (body.position !== undefined) updates.position = body.position;
       if (body.archived !== undefined) updates.archived_at = body.archived ? new Date().toISOString() : null;
+      if (body.recurrenceRule !== undefined) updates.recurrence_rule = body.recurrenceRule;
+      if (body.recurrenceInterval !== undefined) updates.recurrence_interval = body.recurrenceInterval;
+      if (body.recurrenceUntil !== undefined) updates.recurrence_until = body.recurrenceUntil;
     }
 
     if (body.status !== undefined) {
@@ -241,7 +249,17 @@ tasksRouter.patch(
       throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Нет данных для обновления" });
     }
 
-    const result = await updateTaskWithVersionCheck(task.id, body.version, updates);
+    // PATCH is partial, so this checks the EFFECTIVE state (this update's
+    // value, or else the task's existing one) — createTaskSchema can
+    // refine on this in one shot, but a partial update can't.
+    const effectiveDueAt = updates.due_at !== undefined ? updates.due_at : task.due_at;
+    const effectiveRecurrenceRule = updates.recurrence_rule !== undefined ? updates.recurrence_rule : task.recurrence_rule;
+    if (effectiveRecurrenceRule && !effectiveDueAt) {
+      throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Для повторяющейся задачи нужен срок выполнения" });
+    }
+
+    const recurrenceRoll = applyRecurrenceOnCompletion(task, updates);
+    const result = await updateTaskWithVersionCheck(task.id, body.version, recurrenceRoll.updates);
     if (!result.ok) {
       // Someone else updated (or deleted) this task between our read and
       // this write. Re-fetch so the client learns the actual current
@@ -250,6 +268,13 @@ tasksRouter.patch(
       throw new ApiError(ERROR_CODES.TASK_VERSION_CONFLICT, {
         details: current ? { currentVersion: current.version } : { deleted: true },
       });
+    }
+
+    if (recurrenceRoll.rolled) {
+      // task_reminders is keyed by task_id, and rolling reuses the same
+      // row/id — without this, the first occurrence's reminder would
+      // permanently block every occurrence after it.
+      await reminderRepository.clearRemindersForTask(task.id);
     }
 
     const assigneeChanged = updates.assignee_id !== undefined && updates.assignee_id !== task.assignee_id;

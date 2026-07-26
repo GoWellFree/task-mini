@@ -21,6 +21,28 @@ export async function listTasksAssignedToUser(userId: string): Promise<TaskWithW
   return (data ?? []) as unknown as TaskWithWorkspace[];
 }
 
+/**
+ * Candidate tasks for the reminder worker: active, not finished, with a due
+ * date on or before `cutoffIso`. Deliberately broad (across all workspaces,
+ * no per-recipient time-window check) — the per-recipient reminder lead
+ * time (user_settings.default_reminder_minutes) varies by user, so that
+ * check happens in reminderService against this candidate set rather than
+ * here, where it can't be expressed as a single column comparison anyway.
+ */
+export async function listActiveTasksDueWithin(cutoffIso: string): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .is("deleted_at", null)
+    .is("archived_at", null)
+    .not("status", "in", "(done,cancelled)")
+    .not("due_at", "is", null)
+    .lte("due_at", cutoffIso);
+
+  if (error) throw error;
+  return (data ?? []) as Task[];
+}
+
 export interface ListTasksOptions {
   /** Free-text search against title (weight A) + description (weight B). */
   search?: string;
@@ -187,6 +209,9 @@ export interface NewTaskInput {
   priority?: Task["priority"];
   start_at?: string | null;
   estimate_minutes?: number | null;
+  recurrence_rule?: Task["recurrence_rule"];
+  recurrence_interval?: number;
+  recurrence_until?: string | null;
 }
 
 export async function createTask(input: NewTaskInput): Promise<Task> {

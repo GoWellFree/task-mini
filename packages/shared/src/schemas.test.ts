@@ -98,6 +98,49 @@ describe("createTaskSchema", () => {
       false,
     );
   });
+
+  it("accepts a recurring task that also has a dueAt", () => {
+    const result = createTaskSchema.safeParse({
+      workspaceId: VALID_UUID,
+      title: "x",
+      dueAt: "2026-12-31T10:00:00.000Z",
+      recurrenceRule: "weekly",
+      recurrenceInterval: 2,
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects a recurrenceRule with no dueAt to anchor it", () => {
+    const result = createTaskSchema.safeParse({ workspaceId: VALID_UUID, title: "x", recurrenceRule: "daily" });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a recurrenceRule outside the supported set", () => {
+    const result = createTaskSchema.safeParse({
+      workspaceId: VALID_UUID,
+      title: "x",
+      dueAt: "2026-12-31T10:00:00.000Z",
+      recurrenceRule: "hourly",
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects a non-positive or absurdly large recurrenceInterval", () => {
+    const base = { workspaceId: VALID_UUID, title: "x", dueAt: "2026-12-31T10:00:00.000Z", recurrenceRule: "daily" as const };
+    expect(createTaskSchema.safeParse({ ...base, recurrenceInterval: 0 }).success).toBe(false);
+    expect(createTaskSchema.safeParse({ ...base, recurrenceInterval: 1000 }).success).toBe(false);
+    expect(createTaskSchema.safeParse({ ...base, recurrenceInterval: 1 }).success).toBe(true);
+  });
+
+  it("defaults recurrenceInterval to nothing (optional) when a rule is given without one", () => {
+    const result = createTaskSchema.safeParse({
+      workspaceId: VALID_UUID,
+      title: "x",
+      dueAt: "2026-12-31T10:00:00.000Z",
+      recurrenceRule: "monthly",
+    });
+    expect(result.success && result.data.recurrenceInterval).toBeUndefined();
+  });
 });
 
 describe("updateTaskSchema", () => {
@@ -135,6 +178,25 @@ describe("updateTaskSchema", () => {
   it("allows clearing projectId and parentTaskId", () => {
     expect(updateTaskSchema.safeParse({ version: 1, projectId: null, parentTaskId: null }).success).toBe(true);
   });
+
+  it("accepts setting a recurrence rule and clearing it (null)", () => {
+    expect(updateTaskSchema.safeParse({ version: 1, recurrenceRule: "yearly", recurrenceInterval: 1 }).success).toBe(
+      true,
+    );
+    expect(updateTaskSchema.safeParse({ version: 1, recurrenceRule: null }).success).toBe(true);
+  });
+
+  it("rejects a recurrenceRule outside the supported set", () => {
+    expect(updateTaskSchema.safeParse({ version: 1, recurrenceRule: "biweekly" }).success).toBe(false);
+  });
+
+  it("allows clearing recurrenceUntil independently of recurrenceRule", () => {
+    expect(updateTaskSchema.safeParse({ version: 1, recurrenceUntil: null }).success).toBe(true);
+  });
+
+  // Whether a recurrenceRule needs a due date is checked against the task's
+  // EFFECTIVE state at the route layer, not here — a partial patch alone
+  // can't know if the task already has a due_at from before.
 });
 
 describe("createWorkspaceSchema", () => {
