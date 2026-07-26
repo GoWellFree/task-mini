@@ -14,6 +14,7 @@ import { asyncHandler, validateBody, validateParams } from "../middleware/valida
 import {
   getTaskEditRights,
   requireAssigneeIsMember,
+  requireContributor,
   requireMembership,
   requireTaskManager,
 } from "../permissions/workspacePermissions.js";
@@ -68,7 +69,7 @@ tasksRouter.post(
   asyncHandler(async (req, res) => {
     const body = req.body as CreateTaskInput;
 
-    await requireMembership(body.workspaceId, req.user!.id);
+    await requireContributor(body.workspaceId, req.user!.id);
     if (body.assigneeId) {
       await requireAssigneeIsMember(body.workspaceId, body.assigneeId);
     }

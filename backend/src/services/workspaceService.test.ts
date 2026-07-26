@@ -8,7 +8,7 @@ const repo = vi.hoisted(() => ({
 
 vi.mock("../repositories/workspaceRepository.js", () => repo);
 
-const { createWorkspaceWithOwner } = await import("./workspaceService.js");
+const { createWorkspaceWithOwner, createPersonalWorkspace } = await import("./workspaceService.js");
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -24,6 +24,15 @@ describe("createWorkspaceWithOwner", () => {
     expect(workspace).toMatchObject({ id: "ws-1" });
     expect(repo.addMember).toHaveBeenCalledWith("ws-1", "user-1", "owner");
     expect(repo.deleteWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("defaults to type 'team' when the caller doesn't specify one", async () => {
+    repo.createWorkspace.mockResolvedValue({ id: "ws-1", name: "Работа", owner_id: "user-1" });
+    repo.addMember.mockResolvedValue(undefined);
+
+    await createWorkspaceWithOwner("Работа", "user-1");
+
+    expect(repo.createWorkspace).toHaveBeenCalledWith("Работа", "user-1", expect.any(String), "team");
   });
 
   it("deletes the just-created workspace if the owner membership insert fails", async () => {
@@ -53,5 +62,23 @@ describe("createWorkspaceWithOwner", () => {
     expect(consoleError).toHaveBeenCalled();
 
     consoleError.mockRestore();
+  });
+});
+
+describe("createPersonalWorkspace", () => {
+  it("creates a type='personal' workspace owned by the user", async () => {
+    repo.createWorkspace.mockResolvedValue({ id: "ws-personal", owner_id: "user-1", type: "personal" });
+    repo.addMember.mockResolvedValue(undefined);
+
+    const workspace = await createPersonalWorkspace("user-1");
+
+    expect(workspace).toMatchObject({ id: "ws-personal" });
+    expect(repo.createWorkspace).toHaveBeenCalledWith(
+      expect.any(String),
+      "user-1",
+      expect.any(String),
+      "personal",
+    );
+    expect(repo.addMember).toHaveBeenCalledWith("ws-personal", "user-1", "owner");
   });
 });

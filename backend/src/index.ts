@@ -8,6 +8,7 @@ import { env } from "./lib/env.js";
 import { bot, isValidWebhookSecret, registerBotCommands, shouldProcessUpdate } from "./lib/bot.js";
 import { errorHandler, notFoundHandler, requestId } from "./middleware/errorHandler.js";
 import { authRouter } from "./routes/auth.js";
+import { usersRouter } from "./routes/users.js";
 import { workspacesRouter } from "./routes/workspaces.js";
 import { tasksRouter, workspaceTasksRouter } from "./routes/tasks.js";
 
@@ -87,6 +88,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/auth", authRouter);
+app.use("/api/users", usersRouter);
 app.use("/api/workspaces", workspacesRouter);
 app.use("/api/workspaces/:workspaceId/tasks", workspaceTasksRouter);
 app.use("/api/tasks", tasksRouter);

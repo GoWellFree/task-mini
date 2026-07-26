@@ -67,7 +67,11 @@ workspacesRouter.post(
     const { inviteCode } = req.params as { inviteCode: string };
 
     const workspace = await workspaceRepository.findWorkspaceByInviteCode(inviteCode);
-    if (!workspace) {
+    // A personal workspace's invite_code exists only because the column is
+    // required — it was never meant to be shareable. Treated as not-found
+    // rather than a distinct "can't join a personal workspace" error, so a
+    // guessed/leaked code doesn't confirm one exists behind it either.
+    if (!workspace || workspace.type === "personal") {
       throw new ApiError(ERROR_CODES.INVITE_NOT_FOUND);
     }
 

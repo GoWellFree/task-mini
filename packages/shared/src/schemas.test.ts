@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createTaskSchema, createWorkspaceSchema, updateTaskSchema, TITLE_MAX } from "./schemas.js";
+import {
+  createTaskSchema,
+  createWorkspaceSchema,
+  updateTaskSchema,
+  updateUserSettingsSchema,
+  TITLE_MAX,
+} from "./schemas.js";
 
 const VALID_UUID = "11111111-2222-4333-8444-555555555555";
 
@@ -86,5 +92,36 @@ describe("createWorkspaceSchema", () => {
     expect(createWorkspaceSchema.safeParse({ name: "" }).success).toBe(false);
     expect(createWorkspaceSchema.safeParse({ name: "  " }).success).toBe(false);
     expect(createWorkspaceSchema.safeParse({ name: "Семья" }).success).toBe(true);
+  });
+});
+
+describe("updateUserSettingsSchema", () => {
+  it("rejects an empty patch", () => {
+    expect(updateUserSettingsSchema.safeParse({}).success).toBe(false);
+  });
+
+  it("accepts a single valid field", () => {
+    expect(updateUserSettingsSchema.safeParse({ theme: "dark" }).success).toBe(true);
+  });
+
+  it("rejects a theme outside the supported set", () => {
+    expect(updateUserSettingsSchema.safeParse({ theme: "solarized" }).success).toBe(false);
+  });
+
+  it("validates HH:MM time-of-day fields and allows clearing quiet hours", () => {
+    expect(updateUserSettingsSchema.safeParse({ dailyDigestTime: "09:00" }).success).toBe(true);
+    expect(updateUserSettingsSchema.safeParse({ dailyDigestTime: "9:00" }).success).toBe(false);
+    expect(updateUserSettingsSchema.safeParse({ dailyDigestTime: "24:00" }).success).toBe(false);
+    expect(updateUserSettingsSchema.safeParse({ quietHoursStart: null, quietHoursEnd: null }).success).toBe(true);
+  });
+
+  it("rejects weekStartsOn outside 0-6", () => {
+    expect(updateUserSettingsSchema.safeParse({ weekStartsOn: 7 }).success).toBe(false);
+    expect(updateUserSettingsSchema.safeParse({ weekStartsOn: 0 }).success).toBe(true);
+  });
+
+  it("rejects a non-UUID defaultWorkspaceId but allows clearing it", () => {
+    expect(updateUserSettingsSchema.safeParse({ defaultWorkspaceId: "nope" }).success).toBe(false);
+    expect(updateUserSettingsSchema.safeParse({ defaultWorkspaceId: null }).success).toBe(true);
   });
 });

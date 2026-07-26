@@ -28,15 +28,29 @@ export async function requireMembership(workspaceId: string, userId: string): Pr
   return membership;
 }
 
-export async function isWorkspaceOwner(workspaceId: string, userId: string): Promise<boolean> {
-  const { data } = await supabase.from("workspaces").select("owner_id").eq("id", workspaceId).maybeSingle();
-  return (data as { owner_id: string } | null)?.owner_id === userId;
+/**
+ * Membership plus a role above 'viewer'. Viewer is intentionally read-only,
+ * so anything that changes workspace state (creating a task, being assigned
+ * one) goes through this instead of requireMembership.
+ */
+export async function requireContributor(workspaceId: string, userId: string): Promise<WorkspaceMember> {
+  const membership = await requireMembership(workspaceId, userId);
+  if (membership.role === "viewer") {
+    throw new ApiError(ERROR_CODES.WORKSPACE_ACCESS_DENIED, { message: "Роль «наблюдатель» доступна только для просмотра" });
+  }
+  return membership;
 }
 
-/** Task creator or workspace owner: may edit every field and delete the task. */
+/**
+ * Task creator, workspace owner, or workspace admin: may edit every field
+ * and delete the task. 'manager' is deliberately not included here yet — it
+ * has no distinct scope until project-level management exists to give it
+ * one, so for now it behaves like a plain member (assignee-only rights).
+ */
 export async function canManageTask(task: Task, userId: string): Promise<boolean> {
   if (task.creator_id === userId) return true;
-  return isWorkspaceOwner(task.workspace_id, userId);
+  const membership = await getMembership(task.workspace_id, userId);
+  return membership?.role === "owner" || membership?.role === "admin";
 }
 
 export async function requireTaskManager(task: Task, userId: string): Promise<void> {
@@ -69,9 +83,10 @@ export async function getTaskEditRights(task: Task, userId: string): Promise<Tas
   return { canManage, canChangeStatus: true };
 }
 
-/** An assignee must themselves be a member of the task's workspace. */
+/** An assignee must themselves be a contributing member — not absent, not a viewer. */
 export async function requireAssigneeIsMember(workspaceId: string, assigneeId: string): Promise<void> {
-  if (!(await getMembership(workspaceId, assigneeId))) {
+  const membership = await getMembership(workspaceId, assigneeId);
+  if (!membership || membership.role === "viewer") {
     throw new ApiError(ERROR_CODES.ASSIGNEE_NOT_MEMBER);
   }
 }

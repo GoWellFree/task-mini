@@ -1,5 +1,5 @@
 import { supabase } from "../lib/supabase.js";
-import type { Workspace, WorkspaceMemberWithUser } from "../types/index.js";
+import type { Workspace, WorkspaceMemberWithUser, WorkspaceRole, WorkspaceType } from "../types/index.js";
 
 /** Raw workspace/workspace_members table access. No business logic, no auth checks. */
 
@@ -23,10 +23,15 @@ export async function findWorkspaceByInviteCode(inviteCode: string): Promise<Wor
   return (data as Workspace | null) ?? null;
 }
 
-export async function createWorkspace(name: string, ownerId: string, inviteCode: string): Promise<Workspace> {
+export async function createWorkspace(
+  name: string,
+  ownerId: string,
+  inviteCode: string,
+  type: WorkspaceType = "team",
+): Promise<Workspace> {
   const { data, error } = await supabase
     .from("workspaces")
-    .insert({ name, owner_id: ownerId, invite_code: inviteCode })
+    .insert({ name, owner_id: ownerId, invite_code: inviteCode, type })
     .select("*")
     .single();
 
@@ -50,7 +55,7 @@ export async function getWorkspaceMembers(workspaceId: string): Promise<Workspac
   return (data ?? []) as unknown as WorkspaceMemberWithUser[];
 }
 
-export async function addMember(workspaceId: string, userId: string, role: "owner" | "member"): Promise<void> {
+export async function addMember(workspaceId: string, userId: string, role: WorkspaceRole): Promise<void> {
   const { error } = await supabase.from("workspace_members").insert({ workspace_id: workspaceId, user_id: userId, role });
   if (error) throw error;
 }

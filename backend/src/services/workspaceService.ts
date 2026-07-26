@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import * as workspaceRepository from "../repositories/workspaceRepository.js";
-import type { Workspace } from "../types/index.js";
+import type { Workspace, WorkspaceType } from "../types/index.js";
 
 function generateInviteCode(): string {
   return randomBytes(6).toString("hex");
@@ -14,8 +14,12 @@ function generateInviteCode(): string {
  * inaccessible (every read requires membership), which is worse than the
  * create simply failing.
  */
-export async function createWorkspaceWithOwner(name: string, ownerId: string): Promise<Workspace> {
-  const workspace = await workspaceRepository.createWorkspace(name, ownerId, generateInviteCode());
+export async function createWorkspaceWithOwner(
+  name: string,
+  ownerId: string,
+  type: WorkspaceType = "team",
+): Promise<Workspace> {
+  const workspace = await workspaceRepository.createWorkspace(name, ownerId, generateInviteCode(), type);
 
   try {
     await workspaceRepository.addMember(workspace.id, ownerId, "owner");
@@ -32,4 +36,9 @@ export async function createWorkspaceWithOwner(name: string, ownerId: string): P
   }
 
   return workspace;
+}
+
+/** Every user gets exactly one of these, created once at registration (see onboardingService). */
+export async function createPersonalWorkspace(ownerId: string): Promise<Workspace> {
+  return createWorkspaceWithOwner("Личное пространство", ownerId, "personal");
 }

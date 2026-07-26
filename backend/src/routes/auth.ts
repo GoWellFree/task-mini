@@ -12,6 +12,7 @@ import { verifyTelegramInitData } from "../lib/telegramAuth.js";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler, validateBody } from "../middleware/validate.js";
 import { findUserByTelegramId, upsertUserByTelegramId } from "../repositories/userRepository.js";
+import { onboardNewUser } from "../services/onboardingService.js";
 import {
   createSession,
   listActiveSessions,
@@ -28,11 +29,11 @@ async function findOrCreateUser(input: {
   username?: string;
   first_name: string;
   last_name?: string;
-}): Promise<User> {
+}): Promise<{ user: User; isNew: boolean }> {
   const existing = await findUserByTelegramId(input.telegram_id);
-  if (existing) return existing;
+  if (existing) return { user: existing, isNew: false };
 
-  return upsertUserByTelegramId(input);
+  return { user: await upsertUserByTelegramId(input), isNew: true };
 }
 
 authRouter.post(
@@ -45,12 +46,13 @@ authRouter.post(
 
     // Dev auth path: only available when explicitly enabled and never in production.
     if (dev && env.enableDevAuth) {
-      const user = await findOrCreateUser({
+      const { user, isNew } = await findOrCreateUser({
         telegram_id: 100000001,
         username: "dev_user",
         first_name: "Dev",
         last_name: "User",
       });
+      if (isNew) await onboardNewUser(user.id);
       const tokens = await createSession({
         userId: user.id,
         telegramId: user.telegram_id,
@@ -74,12 +76,13 @@ authRouter.post(
       throw new ApiError(ERROR_CODES.UNAUTHORIZED, { message: "Не удалось подтвердить данные Telegram" });
     }
 
-    const user = await findOrCreateUser({
+    const { user, isNew } = await findOrCreateUser({
       telegram_id: parsed.user.id,
       username: parsed.user.username,
       first_name: parsed.user.first_name,
       last_name: parsed.user.last_name,
     });
+    if (isNew) await onboardNewUser(user.id);
 
     const tokens = await createSession({
       userId: user.id,

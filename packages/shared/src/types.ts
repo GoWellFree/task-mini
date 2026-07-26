@@ -1,4 +1,4 @@
-import type { TaskStatus, WorkspaceRole } from "./enums.js";
+import type { TaskStatus, Theme, WorkspaceRole, WorkspaceType } from "./enums.js";
 
 export interface User {
   id: string;
@@ -7,6 +7,14 @@ export interface User {
   first_name: string;
   last_name: string | null;
   created_at: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  timezone: string;
+  locale: string;
+  onboarding_completed: boolean;
+  last_seen_at: string | null;
+  updated_at: string;
+  deleted_at: string | null;
 }
 
 /** The subset of a user safe to expose to other workspace members. */
@@ -18,6 +26,23 @@ export interface Workspace {
   owner_id: string;
   invite_code: string;
   created_at: string;
+  type: WorkspaceType;
+}
+
+export interface UserSettings {
+  user_id: string;
+  default_workspace_id: string | null;
+  default_reminder_minutes: number;
+  week_starts_on: number;
+  daily_digest_enabled: boolean;
+  daily_digest_time: string;
+  evening_digest_enabled: boolean;
+  quiet_hours_start: string | null;
+  quiet_hours_end: string | null;
+  telegram_notifications_enabled: boolean;
+  theme: Theme;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface WorkspaceMember {

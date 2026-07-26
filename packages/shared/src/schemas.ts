@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { TASK_STATUS_VALUES } from "./enums.js";
+import { TASK_STATUS_VALUES, THEME_VALUES } from "./enums.js";
 
 export const TITLE_MAX = 200;
 export const DESCRIPTION_MAX = 5000;
@@ -58,6 +58,24 @@ export const refreshTokenSchema = z.object({
   refreshToken: z.string().min(1, "Отсутствует refresh-токен"),
 });
 export type RefreshTokenInput = z.infer<typeof refreshTokenSchema>;
+
+const timeOfDay = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Укажите время в формате ЧЧ:ММ");
+
+export const updateUserSettingsSchema = z
+  .object({
+    defaultWorkspaceId: uuid.nullable().optional(),
+    defaultReminderMinutes: z.number().int().min(0).max(60 * 24 * 7).optional(),
+    weekStartsOn: z.number().int().min(0).max(6).optional(),
+    dailyDigestEnabled: z.boolean().optional(),
+    dailyDigestTime: timeOfDay.optional(),
+    eveningDigestEnabled: z.boolean().optional(),
+    quietHoursStart: timeOfDay.nullable().optional(),
+    quietHoursEnd: timeOfDay.nullable().optional(),
+    telegramNotificationsEnabled: z.boolean().optional(),
+    theme: z.enum(THEME_VALUES).optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+export type UpdateUserSettingsInput = z.infer<typeof updateUserSettingsSchema>;
 
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });

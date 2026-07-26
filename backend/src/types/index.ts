@@ -7,10 +7,12 @@ export type {
   TaskStatus,
   TaskWithWorkspace,
   User,
+  UserSettings,
   Workspace,
   WorkspaceMember,
   WorkspaceMemberWithUser,
   WorkspaceRole,
+  WorkspaceType,
 } from "@task-mini/shared";
 
 // Augment Express Request with the authenticated user attached by the auth middleware.
