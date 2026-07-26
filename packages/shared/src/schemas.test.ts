@@ -313,6 +313,37 @@ describe("taskListQuerySchema", () => {
   it("rejects a q over the max length", () => {
     expect(taskListQuerySchema.safeParse({ q: "x".repeat(SEARCH_QUERY_MAX + 1) }).success).toBe(false);
   });
+
+  it("accepts a full combination of structured filters", () => {
+    const result = taskListQuerySchema.safeParse({
+      projectId: VALID_UUID,
+      status: "in_progress",
+      priority: "high",
+      assigneeId: VALID_UUID,
+      authorId: VALID_UUID,
+      labelId: VALID_UUID,
+      dueBefore: "2024-02-28T00:00:00Z",
+      dueAfter: "2024-02-01T00:00:00Z",
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects an unknown status or priority value", () => {
+    expect(taskListQuerySchema.safeParse({ status: "not-a-status" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ priority: "not-a-priority" }).success).toBe(false);
+  });
+
+  it("rejects a non-UUID id filter", () => {
+    expect(taskListQuerySchema.safeParse({ projectId: "nope" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ assigneeId: "nope" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ authorId: "nope" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ labelId: "nope" }).success).toBe(false);
+  });
+
+  it("rejects a malformed due date", () => {
+    expect(taskListQuerySchema.safeParse({ dueBefore: "not-a-date" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ dueAfter: "2024-13-99" }).success).toBe(false);
+  });
 });
 
 describe("updateCommentSchema", () => {

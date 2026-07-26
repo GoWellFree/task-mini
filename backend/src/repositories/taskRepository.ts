@@ -24,6 +24,16 @@ export async function listTasksAssignedToUser(userId: string): Promise<TaskWithW
 export interface ListTasksOptions {
   /** Free-text search against title (weight A) + description (weight B). */
   search?: string;
+  projectId?: string;
+  status?: TaskStatus;
+  priority?: Task["priority"];
+  /** Matches the full task_assignees set, not just the legacy assignee_id mirror. */
+  assigneeId?: string;
+  /** The task's creator (tasks.creator_id) — "author" in the spec's terms. */
+  authorId?: string;
+  labelId?: string;
+  dueBefore?: string;
+  dueAfter?: string;
 }
 
 /**
@@ -40,33 +50,97 @@ function toQuotedIlikePattern(term: string): string {
   return `"${pattern.replace(/"/g, '\\"')}"`;
 }
 
+/**
+ * assigneeId/labelId live in join tables (task_assignees/task_labels), not
+ * on tasks itself, so they resolve to an id allow-list applied via .in("id",
+ * ...) rather than a plain .eq(). undefined means "no restriction from
+ * these two filters"; a defined-but-empty array means "no task can
+ * possibly match", which the caller short-circuits on before querying
+ * tasks at all.
+ */
+async function resolveAllowedTaskIds(options: ListTasksOptions): Promise<string[] | undefined> {
+  const [assigneeTaskIds, labelTaskIds] = await Promise.all([
+    options.assigneeId ? listTaskIdsForAssignee(options.assigneeId) : undefined,
+    options.labelId ? listTaskIdsForLabel(options.labelId) : undefined,
+  ]);
+
+  if (assigneeTaskIds && labelTaskIds) {
+    const labelSet = new Set(labelTaskIds);
+    return assigneeTaskIds.filter((id) => labelSet.has(id));
+  }
+  return assigneeTaskIds ?? labelTaskIds;
+}
+
+async function listTaskIdsForAssignee(userId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("task_assignees").select("task_id").eq("user_id", userId);
+  if (error) throw error;
+  return (data ?? []).map((row) => (row as { task_id: string }).task_id);
+}
+
+async function listTaskIdsForLabel(labelId: string): Promise<string[]> {
+  const { data, error } = await supabase.from("task_labels").select("task_id").eq("label_id", labelId);
+  if (error) throw error;
+  return (data ?? []).map((row) => (row as { task_id: string }).task_id);
+}
+
+type TasksFilterBuilder = ReturnType<ReturnType<typeof supabase.from>["select"]>;
+
+/** The scalar (same-table, single-value) filters shared by all three query variants below. */
+function applyScalarFilters(
+  query: TasksFilterBuilder,
+  options: ListTasksOptions,
+  allowedIds: string[] | undefined,
+): TasksFilterBuilder {
+  let q = query;
+  if (options.projectId) q = q.eq("project_id", options.projectId);
+  if (options.status) q = q.eq("status", options.status);
+  if (options.priority) q = q.eq("priority", options.priority);
+  if (options.authorId) q = q.eq("creator_id", options.authorId);
+  if (options.dueBefore) q = q.lte("due_at", options.dueBefore);
+  if (options.dueAfter) q = q.gte("due_at", options.dueAfter);
+  if (allowedIds) q = q.in("id", allowedIds);
+  return q;
+}
+
 export async function listTasksForWorkspace(workspaceId: string, options: ListTasksOptions = {}): Promise<Task[]> {
+  const allowedIds = await resolveAllowedTaskIds(options);
+  if (allowedIds && allowedIds.length === 0) return [];
+
   const search = options.search?.trim();
   if (search) {
-    const ftsMatches = await searchTasksByFts(workspaceId, search);
+    const ftsMatches = await searchTasksByFts(workspaceId, search, options, allowedIds);
     if (ftsMatches.length > 0) return ftsMatches;
-    return searchTasksByTrigram(workspaceId, search);
+    return searchTasksByTrigram(workspaceId, search, options, allowedIds);
   }
 
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .order("created_at", { ascending: false });
+  const query = applyScalarFilters(
+    supabase.from("tasks").select("*").eq("workspace_id", workspaceId).is("deleted_at", null),
+    options,
+    allowedIds,
+  );
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data ?? []) as Task[];
 }
 
-async function searchTasksByFts(workspaceId: string, search: string): Promise<Task[]> {
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .textSearch("search_vector", search, { type: "websearch", config: "russian" })
-    .order("created_at", { ascending: false });
+async function searchTasksByFts(
+  workspaceId: string,
+  search: string,
+  options: ListTasksOptions,
+  allowedIds: string[] | undefined,
+): Promise<Task[]> {
+  const query = applyScalarFilters(
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .textSearch("search_vector", search, { type: "websearch", config: "russian" }),
+    options,
+    allowedIds,
+  );
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data ?? []) as Task[];
@@ -77,15 +151,24 @@ async function searchTasksByFts(workspaceId: string, search: string): Promise<Ta
  * fast, and catches substrings/typos that don't align to FTS's word/lexeme
  * boundaries (e.g. "молок" as a mid-word fragment, or a plain misspelling).
  */
-async function searchTasksByTrigram(workspaceId: string, search: string): Promise<Task[]> {
+async function searchTasksByTrigram(
+  workspaceId: string,
+  search: string,
+  options: ListTasksOptions,
+  allowedIds: string[] | undefined,
+): Promise<Task[]> {
   const pattern = toQuotedIlikePattern(search);
-  const { data, error } = await supabase
-    .from("tasks")
-    .select("*")
-    .eq("workspace_id", workspaceId)
-    .is("deleted_at", null)
-    .or(`title.ilike.${pattern},description.ilike.${pattern}`)
-    .order("created_at", { ascending: false });
+  const query = applyScalarFilters(
+    supabase
+      .from("tasks")
+      .select("*")
+      .eq("workspace_id", workspaceId)
+      .is("deleted_at", null)
+      .or(`title.ilike.${pattern},description.ilike.${pattern}`),
+    options,
+    allowedIds,
+  );
+  const { data, error } = await query.order("created_at", { ascending: false });
 
   if (error) throw error;
   return (data ?? []) as Task[];

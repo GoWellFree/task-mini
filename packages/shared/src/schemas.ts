@@ -176,9 +176,17 @@ export type UpdateCommentInput = z.infer<typeof updateCommentSchema>;
 
 export const SEARCH_QUERY_MAX = 200;
 
-/** Query-string schema for GET /api/workspaces/:workspaceId/tasks — grows with P1.10's filters. */
+/** Query-string schema for GET /api/workspaces/:workspaceId/tasks. */
 export const taskListQuerySchema = z.object({
   q: z.string().trim().min(1).max(SEARCH_QUERY_MAX).optional(),
+  projectId: uuid.optional(),
+  status: taskStatus.optional(),
+  priority: taskPriority.optional(),
+  assigneeId: uuid.optional(),
+  authorId: uuid.optional(),
+  labelId: uuid.optional(),
+  dueBefore: isoDateTime.optional(),
+  dueAfter: isoDateTime.optional(),
 });
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 

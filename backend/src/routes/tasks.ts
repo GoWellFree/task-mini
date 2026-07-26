@@ -575,8 +575,19 @@ workspaceTasksRouter.get(
     const { workspaceId } = req.params as { workspaceId: string };
     await requireMembership(workspaceId, req.user!.id);
 
-    const { q } = req.query as unknown as TaskListQuery;
-    const tasks = await listTasksForWorkspace(workspaceId, { search: q });
+    const { q, projectId, status, priority, assigneeId, authorId, labelId, dueBefore, dueAfter } =
+      req.query as unknown as TaskListQuery;
+    const tasks = await listTasksForWorkspace(workspaceId, {
+      search: q,
+      projectId,
+      status,
+      priority,
+      assigneeId,
+      authorId,
+      labelId,
+      dueBefore,
+      dueAfter,
+    });
     res.json({ tasks });
   }),
 );
