@@ -5,6 +5,7 @@ export type {
   ChecklistItem,
   ErrorCode,
   Label,
+  Project,
   PublicUser,
   RecurrenceRule,
   Task,
@@ -20,3 +21,5 @@ export type {
   WorkspaceMemberWithUser,
   WorkspaceRole,
 } from "@task-mini/shared";
+
+export { TASK_PRIORITY_VALUES, TASK_STATUS_VALUES } from "@task-mini/shared";
