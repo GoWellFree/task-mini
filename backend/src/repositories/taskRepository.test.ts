@@ -7,6 +7,9 @@ interface Row {
   deleted_at: string | null;
   status?: string;
   title?: string;
+  description?: string | null;
+  workspace_id?: string;
+  created_at?: string;
   [key: string]: unknown;
 }
 
@@ -18,14 +21,34 @@ vi.mock("../lib/supabase.js", () => {
     let mode: "select" | "update" = "select";
     let updates: Partial<Row> = {};
 
+    let orderBy: { column: keyof Row; ascending: boolean } | null = null;
+
     const matched = () => db.tasks.filter((row) => filters.every((f) => f(row)));
     const apply = () => {
-      const hits = matched();
+      let hits = matched();
       if (mode === "update") {
         for (const row of hits) Object.assign(row, updates);
       }
+      if (orderBy) {
+        const { column, ascending } = orderBy;
+        hits = [...hits].sort((a, c) => {
+          const av = a[column];
+          const cv = c[column];
+          if (av === cv) return 0;
+          if (av === undefined || av === null) return 1;
+          if (cv === undefined || cv === null) return -1;
+          return (av < cv ? -1 : 1) * (ascending ? 1 : -1);
+        });
+      }
       return hits;
     };
+
+    /** Undoes toQuotedIlikePattern's escaping, mirroring what Postgres does when parsing the DSL value. */
+    const unquoteIlikePattern = (raw: string) =>
+      raw
+        .replace(/\\(.)/g, "$1")
+        .slice(1, -1)
+        .toLowerCase();
 
     const b = {
       select: () => b,
@@ -40,6 +63,33 @@ vi.mock("../lib/supabase.js", () => {
       },
       is(column: keyof Row, value: null) {
         filters.push((row) => row[column] === value);
+        return b;
+      },
+      order(column: keyof Row, opts: { ascending: boolean }) {
+        orderBy = { column, ascending: opts.ascending };
+        return b;
+      },
+      // Approximates real FTS well enough to test the fallback control
+      // flow: a whole lowercased word in the query must equal a whole
+      // lowercased word in title/description. Real stemming/ranking is
+      // Postgres's job, verified live against the actual database instead.
+      textSearch(_column: string, query: string) {
+        const queryWords = query.toLowerCase().split(/\s+/).filter(Boolean);
+        filters.push((row) => {
+          const haystack = `${row.title ?? ""} ${row.description ?? ""}`.toLowerCase();
+          const haystackWords = haystack.split(/[^a-zа-яё0-9]+/i).filter(Boolean);
+          return queryWords.some((w) => haystackWords.includes(w));
+        });
+        return b;
+      },
+      // Parses just enough of the real title.ilike."...",description.ilike."..."
+      // DSL this repository's .or() call produces to prove the escaping in
+      // toQuotedIlikePattern round-trips: unescape and substring-match, same
+      // as ILIKE '%literal%' would once Postgres strips the DSL quoting.
+      or(expr: string) {
+        const match = /ilike\."((?:\\.|[^"\\])*)"/.exec(expr);
+        const term = match ? unquoteIlikePattern(match[1]!) : "";
+        filters.push((row) => `${row.title ?? ""} ${row.description ?? ""}`.toLowerCase().includes(term));
         return b;
       },
       maybeSingle: async () => {
@@ -60,9 +110,8 @@ vi.mock("../lib/supabase.js", () => {
   return { supabase: { from: () => builder() } };
 });
 
-const { getActiveTaskById, softDeleteTask, updateTaskWithVersionCheck, wouldCreateCycle } = await import(
-  "./taskRepository.js"
-);
+const { getActiveTaskById, listTasksForWorkspace, softDeleteTask, updateTaskWithVersionCheck, wouldCreateCycle } =
+  await import("./taskRepository.js");
 
 beforeEach(() => {
   db.tasks = [{ id: "task-1", version: 1, deleted_at: null, status: "todo", title: "Original" }];
@@ -174,5 +223,65 @@ describe("softDeleteTask", () => {
     const firstDeletedAt = db.tasks[0]!.deleted_at;
     await softDeleteTask("task-1");
     expect(db.tasks[0]!.deleted_at).toBe(firstDeletedAt);
+  });
+});
+
+describe("listTasksForWorkspace", () => {
+  beforeEach(() => {
+    db.tasks = [
+      { id: "t1", version: 1, deleted_at: null, workspace_id: "ws-1", title: "Купить молоко", created_at: "2024-01-03" },
+      {
+        id: "t2",
+        version: 1,
+        deleted_at: null,
+        workspace_id: "ws-1",
+        title: "Помыть машину",
+        description: "Не забыть про молоко тоже",
+        created_at: "2024-01-02",
+      },
+      { id: "t3", version: 1, deleted_at: null, workspace_id: "ws-1", title: "Позвонить в банк", created_at: "2024-01-01" },
+      { id: "t4", version: 1, deleted_at: null, workspace_id: "ws-2", title: "Молоко из другого воркспейса", created_at: "2024-01-01" },
+    ];
+  });
+
+  it("returns all workspace tasks, newest first, when there is no search term", async () => {
+    const tasks = await listTasksForWorkspace("ws-1");
+    expect(tasks.map((t) => t.id)).toEqual(["t1", "t2", "t3"]);
+  });
+
+  it("finds tasks by a whole-word FTS match in title or description, scoped to the workspace", async () => {
+    const tasks = await listTasksForWorkspace("ws-1", { search: "молоко" });
+    expect(tasks.map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("falls back to a substring match when FTS finds no whole-word hit", async () => {
+    // "молок" is a word fragment, not a whole word, so the FTS tier (which
+    // matches on whole lexemes) finds nothing — this only passes if the
+    // trigram/ILIKE fallback tier actually ran.
+    const tasks = await listTasksForWorkspace("ws-1", { search: "молок" });
+    expect(tasks.map((t) => t.id).sort()).toEqual(["t1", "t2"]);
+  });
+
+  it("returns nothing when neither tier matches anything", async () => {
+    expect(await listTasksForWorkspace("ws-1", { search: "непонятно_что" })).toEqual([]);
+  });
+
+  it("treats % and _ in the search term as literal characters, not ILIKE wildcards", async () => {
+    db.tasks.push({ id: "t5", version: 1, deleted_at: null, workspace_id: "ws-1", title: "Скидка 50%", created_at: "2024-01-04" });
+    const tasks = await listTasksForWorkspace("ws-1", { search: "50%" });
+    expect(tasks.map((t) => t.id)).toEqual(["t5"]);
+  });
+
+  it("does not let PostgREST or()-DSL metacharacters in the search term break the query", async () => {
+    db.tasks.push({
+      id: "t6",
+      version: 1,
+      deleted_at: null,
+      workspace_id: "ws-1",
+      title: "Тест (важно), сделать",
+      created_at: "2024-01-04",
+    });
+    const tasks = await listTasksForWorkspace("ws-1", { search: "(важно)," });
+    expect(tasks.map((t) => t.id)).toEqual(["t6"]);
   });
 });

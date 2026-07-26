@@ -21,12 +21,70 @@ export async function listTasksAssignedToUser(userId: string): Promise<TaskWithW
   return (data ?? []) as unknown as TaskWithWorkspace[];
 }
 
-export async function listTasksForWorkspace(workspaceId: string): Promise<Task[]> {
+export interface ListTasksOptions {
+  /** Free-text search against title (weight A) + description (weight B). */
+  search?: string;
+}
+
+/**
+ * Escapes a raw search term for safe use inside PostgREST's or() filter DSL:
+ * `%`/`_` are neutralized so ILIKE treats them as literal characters (not
+ * wildcards), and the whole value is then quoted per PostgREST's own
+ * convention so a `,`/`(`/`)` in the search text can't be parsed as
+ * filter-DSL structure (which .or() — unlike a lone .ilike() — otherwise
+ * would, since commas/parens are its group/list separators).
+ */
+function toQuotedIlikePattern(term: string): string {
+  const escapedForLike = term.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
+  const pattern = `%${escapedForLike}%`;
+  return `"${pattern.replace(/"/g, '\\"')}"`;
+}
+
+export async function listTasksForWorkspace(workspaceId: string, options: ListTasksOptions = {}): Promise<Task[]> {
+  const search = options.search?.trim();
+  if (search) {
+    const ftsMatches = await searchTasksByFts(workspaceId, search);
+    if (ftsMatches.length > 0) return ftsMatches;
+    return searchTasksByTrigram(workspaceId, search);
+  }
+
   const { data, error } = await supabase
     .from("tasks")
     .select("*")
     .eq("workspace_id", workspaceId)
     .is("deleted_at", null)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as Task[];
+}
+
+async function searchTasksByFts(workspaceId: string, search: string): Promise<Task[]> {
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .textSearch("search_vector", search, { type: "websearch", config: "russian" })
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as Task[];
+}
+
+/**
+ * Fallback when FTS finds nothing: pg_trgm accelerates ILIKE so this stays
+ * fast, and catches substrings/typos that don't align to FTS's word/lexeme
+ * boundaries (e.g. "молок" as a mid-word fragment, or a plain misspelling).
+ */
+async function searchTasksByTrigram(workspaceId: string, search: string): Promise<Task[]> {
+  const pattern = toQuotedIlikePattern(search);
+  const { data, error } = await supabase
+    .from("tasks")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .is("deleted_at", null)
+    .or(`title.ilike.${pattern},description.ilike.${pattern}`)
     .order("created_at", { ascending: false });
 
   if (error) throw error;

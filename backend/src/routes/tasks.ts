@@ -10,6 +10,7 @@ import {
   taskChecklistItemParamSchema,
   taskCommentParamSchema,
   taskLabelParamSchema,
+  taskListQuerySchema,
   updateChecklistItemSchema,
   updateCommentSchema,
   updateTaskSchema,
@@ -20,13 +21,14 @@ import {
   type CreateChecklistItemInput,
   type CreateCommentInput,
   type CreateTaskInput,
+  type TaskListQuery,
   type UpdateChecklistItemInput,
   type UpdateCommentInput,
   type UpdateTaskInput,
 } from "@task-mini/shared";
 import { ApiError } from "../lib/apiError.js";
 import { requireAuth } from "../middleware/auth.js";
-import { asyncHandler, validateBody, validateParams } from "../middleware/validate.js";
+import { asyncHandler, validateBody, validateParams, validateQuery } from "../middleware/validate.js";
 import {
   getTaskEditRights,
   requireAssigneeIsMember,
@@ -568,11 +570,13 @@ workspaceTasksRouter.use(requireAuth);
 workspaceTasksRouter.get(
   "/",
   validateParams(workspaceIdParamSchema),
+  validateQuery(taskListQuerySchema),
   asyncHandler(async (req, res) => {
     const { workspaceId } = req.params as { workspaceId: string };
     await requireMembership(workspaceId, req.user!.id);
 
-    const tasks = await listTasksForWorkspace(workspaceId);
+    const { q } = req.query as unknown as TaskListQuery;
+    const tasks = await listTasksForWorkspace(workspaceId, { search: q });
     res.json({ tasks });
   }),
 );

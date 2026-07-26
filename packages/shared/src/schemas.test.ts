@@ -6,6 +6,7 @@ import {
   createProjectSchema,
   createTaskSchema,
   createWorkspaceSchema,
+  taskListQuerySchema,
   updateChecklistItemSchema,
   updateCommentSchema,
   updateLabelSchema,
@@ -13,6 +14,7 @@ import {
   updateTaskSchema,
   updateUserSettingsSchema,
   COMMENT_BODY_MAX,
+  SEARCH_QUERY_MAX,
   TITLE_MAX,
 } from "./schemas.js";
 
@@ -290,6 +292,26 @@ describe("createCommentSchema", () => {
     const validUuid = "11111111-2222-4333-8444-555555555555";
     expect(createCommentSchema.safeParse({ body: "x", parentCommentId: validUuid }).success).toBe(true);
     expect(createCommentSchema.safeParse({ body: "x", parentCommentId: "nope" }).success).toBe(false);
+  });
+});
+
+describe("taskListQuerySchema", () => {
+  it("accepts no query at all", () => {
+    expect(taskListQuerySchema.safeParse({}).success).toBe(true);
+  });
+
+  it("trims a search term", () => {
+    const result = taskListQuerySchema.safeParse({ q: "  молоко  " });
+    expect(result.success && result.data.q).toBe("молоко");
+  });
+
+  it("rejects an empty or whitespace-only q (use no q instead)", () => {
+    expect(taskListQuerySchema.safeParse({ q: "" }).success).toBe(false);
+    expect(taskListQuerySchema.safeParse({ q: "   " }).success).toBe(false);
+  });
+
+  it("rejects a q over the max length", () => {
+    expect(taskListQuerySchema.safeParse({ q: "x".repeat(SEARCH_QUERY_MAX + 1) }).success).toBe(false);
   });
 });
 

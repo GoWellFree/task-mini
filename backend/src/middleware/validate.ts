@@ -37,3 +37,16 @@ export function validateParams<T>(schema: ZodSchema<T>): RequestHandler {
     next();
   };
 }
+
+/** Replaces req.query with the parsed (trimmed, typed) result. */
+export function validateQuery<T>(schema: ZodSchema<T>): RequestHandler {
+  return (req, _res, next) => {
+    const result = schema.safeParse(req.query);
+    if (!result.success) {
+      next(result.error);
+      return;
+    }
+    req.query = result.data as typeof req.query;
+    next();
+  };
+}
