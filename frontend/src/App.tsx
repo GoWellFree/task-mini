@@ -53,7 +53,12 @@ function StartParamHandler({ startParam }: { startParam: string | null }) {
       api
         .post<{ workspace: Workspace }>(`/api/workspaces/join/${inviteCode}`)
         .then((res) => navigate(`/workspaces/${res.workspace.id}`, { replace: true }))
-        .catch(() => {});
+        .catch((err) => {
+          // Left silent for the user (they can still open "Группы" and join
+          // manually), but logged — this used to fail invisibly, which made
+          // a real auth bug here much harder to notice.
+          console.error("Failed to auto-join workspace from invite link:", err);
+        });
     } else if (startParam.startsWith("task_")) {
       const taskId = startParam.replace("task_", "");
       navigate(`/tasks/${taskId}`, { replace: true });

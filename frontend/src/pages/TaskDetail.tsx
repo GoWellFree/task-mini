@@ -17,12 +17,16 @@ export function TaskDetail() {
   const [task, setTask] = useState<Task | null>(null);
   const [members, setMembers] = useState<WorkspaceMemberWithUser[]>([]);
   const [error, setError] = useState<string | null>(null);
+  // Separate from `error`: a recoverable, already-resolved condition (we DO
+  // have fresh task data to show) rather than "failed to load the page".
+  const [notice, setNotice] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   async function load() {
     if (!id) return;
     setError(null);
+    setNotice(null);
     try {
       const res = await api.get<{ task: Task }>(`/api/tasks/${id}`);
       setTask(res.task);
@@ -42,11 +46,25 @@ export function TaskDetail() {
   async function updateStatus(status: TaskStatus) {
     if (!task) return;
     setUpdating(true);
+    setNotice(null);
     try {
-      const res = await api.patch<{ task: Task }>(`/api/tasks/${task.id}`, { status });
+      const res = await api.patch<{ task: Task }>(`/api/tasks/${task.id}`, { version: task.version, status });
       setTask(res.task);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось обновить статус");
+      if (err instanceof ApiError && err.code === "TASK_VERSION_CONFLICT") {
+        // Someone else changed this task first. Fetch the real state and
+        // show it — this is not a load failure, so `error` (which blanks the
+        // whole page) is the wrong place for it.
+        try {
+          const fresh = await api.get<{ task: Task }>(`/api/tasks/${task.id}`);
+          setTask(fresh.task);
+          setNotice("Задача изменена в другом месте. Показана актуальная версия — повторите действие при необходимости.");
+        } catch {
+          setError("Задача изменена в другом месте. Обновите страницу.");
+        }
+      } else {
+        setError(err instanceof ApiError ? err.message : "Не удалось обновить статус");
+      }
     } finally {
       setUpdating(false);
     }
@@ -73,6 +91,15 @@ export function TaskDetail() {
 
   return (
     <PageLayout title="Задача" onBack>
+      {notice && (
+        <div className="mb-4 flex items-start justify-between gap-2 rounded-xl bg-amber-100 p-3 text-sm text-amber-900">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="shrink-0 font-medium">
+            ✕
+          </button>
+        </div>
+      )}
+
       <div className="flex items-start justify-between gap-3">
         <h2 className="text-xl font-semibold">{task.title}</h2>
         <StatusBadge status={task.status} />

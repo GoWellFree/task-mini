@@ -14,7 +14,7 @@ export interface ParsedInitData {
   authDate: number;
 }
 
-const MAX_INIT_DATA_AGE_SECONDS = 24 * 60 * 60; // 24h
+const MAX_INIT_DATA_AGE_SECONDS = 10 * 60; // 10 minutes, per Telegram's recommended replay window
 
 /**
  * Verifies the `initData` string Telegram Mini Apps send on launch.
@@ -34,9 +34,10 @@ export function verifyTelegramInitData(initData: string): ParsedInitData {
     .join("\n");
 
   const secretKey = crypto.createHmac("sha256", "WebAppData").update(env.telegramBotToken).digest();
-  const computedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest("hex");
+  const computedHash = crypto.createHmac("sha256", secretKey).update(dataCheckString).digest();
+  const providedHash = Buffer.from(hash, "hex");
 
-  if (computedHash !== hash) {
+  if (providedHash.length !== computedHash.length || !crypto.timingSafeEqual(providedHash, computedHash)) {
     throw new Error("Invalid Telegram initData signature");
   }
 

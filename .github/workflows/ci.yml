@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      # Backend and frontend both consume @task-mini/shared's compiled output.
+      - name: Build shared
+        run: npm run build:shared
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck (shared)
+        run: npm run typecheck:shared
+
+      - name: Typecheck (backend)
+        run: npm run typecheck:backend
+
+      - name: Typecheck (frontend)
+        run: npm run typecheck:frontend
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build (backend)
+        run: npm run build:backend
+
+      - name: Build (frontend)
+        run: npm run build:frontend
+        env:
+          VITE_API_URL: https://ci.invalid
+          VITE_TELEGRAM_BOT_USERNAME: ci_bot
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Applies every migration to a throwaway Postgres so a broken or
+      # out-of-order migration fails here rather than against Supabase.
+      - name: Start Postgres
+        run: |
+          docker run -d --name pg \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=task_mini_ci \
+            -p 5432:5432 postgres:16-alpine
+          for i in $(seq 1 30); do
+            docker exec pg pg_isready -U postgres && break
+            sleep 1
+          done
+
+      - name: Apply base schema
+        run: docker exec -i pg psql -v ON_ERROR_STOP=1 -U postgres -d task_mini_ci < supabase/schema.sql
+
+      - name: Apply migrations in order
+        run: |
+          shopt -s nullglob extglob
+          # Forward migrations only — *.down.sql are rollbacks and would
+          # undo the very schema this job is validating.
+          files=(supabase/migrations/!(*.down).sql)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No migrations to validate yet."
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            echo "Applying $f"
+            docker exec -i pg psql -v ON_ERROR_STOP=1 -U postgres -d task_mini_ci < "$f"
+          done
+
+      # A rollback that doesn't parse is worthless at the moment it's needed.
+      - name: Verify rollback scripts apply cleanly
+        run: |
+          shopt -s nullglob
+          for f in $(ls -r supabase/migrations/*.down.sql 2>/dev/null); do
+            echo "Reverting $f"
+            docker exec -i pg psql -v ON_ERROR_STOP=1 -U postgres -d task_mini_ci < "$f"
+          done

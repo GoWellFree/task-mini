@@ -1,16 +1,27 @@
 import { Link } from "react-router-dom";
-import type { Task, TaskStatus } from "../types";
+import type { TaskStatus, TaskWithWorkspace } from "../types";
 
+// The create/edit UI only offers todo/in_progress/done for now (kanban and a
+// full status picker are later work) — the rest are labeled here so any task
+// already carrying one of the wider API statuses still displays sensibly.
 export const STATUS_LABELS: Record<TaskStatus, string> = {
+  inbox: "Входящие",
   todo: "К выполнению",
   in_progress: "В работе",
+  waiting: "Ожидание",
+  review: "На проверке",
   done: "Выполнено",
+  cancelled: "Отменено",
 };
 
 const STATUS_STYLES: Record<TaskStatus, string> = {
+  inbox: "bg-zinc-100 text-zinc-700",
   todo: "bg-zinc-100 text-zinc-700",
   in_progress: "bg-amber-100 text-amber-700",
+  waiting: "bg-sky-100 text-sky-700",
+  review: "bg-violet-100 text-violet-700",
   done: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
 };
 
 export function StatusBadge({ status }: { status: TaskStatus }) {
@@ -29,7 +40,7 @@ function formatDueDate(dueAt: string | null): { text: string; overdue: boolean }
   return { text, overdue };
 }
 
-export function TaskListItem({ task }: { task: Task }) {
+export function TaskListItem({ task }: { task: TaskWithWorkspace }) {
   const { text, overdue } = formatDueDate(task.due_at);
 
   return (

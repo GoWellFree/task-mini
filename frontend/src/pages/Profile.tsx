@@ -2,7 +2,7 @@ import { useAuth } from "../lib/AuthContext";
 import { PageLayout } from "../components/PageLayout";
 
 export function Profile() {
-  const { user, logout } = useAuth();
+  const { user, logout, logoutEverywhere } = useAuth();
 
   if (!user) return null;
 
@@ -26,7 +26,14 @@ export function Profile() {
         onClick={logout}
         className="mt-6 w-full rounded-xl bg-tg-secondaryBg py-3 text-sm font-medium text-red-600"
       >
-        Выйти из локальной сессии
+        Выйти
+      </button>
+
+      <button
+        onClick={logoutEverywhere}
+        className="mt-2 w-full rounded-xl bg-tg-secondaryBg py-3 text-sm font-medium text-red-600"
+      >
+        Выйти на всех устройствах
       </button>
     </PageLayout>
   );

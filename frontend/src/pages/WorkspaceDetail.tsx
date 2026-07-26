@@ -57,12 +57,14 @@ export function WorkspaceDetail() {
         >
           + Новая задача
         </Link>
-        <button
-          onClick={copyInviteLink}
-          className="flex-1 rounded-xl bg-tg-secondaryBg py-2.5 text-sm font-medium"
-        >
-          {copied ? "Скопировано ✓" : "Пригласить"}
-        </button>
+        {workspace.type !== "personal" && (
+          <button
+            onClick={copyInviteLink}
+            className="flex-1 rounded-xl bg-tg-secondaryBg py-2.5 text-sm font-medium"
+          >
+            {copied ? "Скопировано ✓" : "Пригласить"}
+          </button>
+        )}
       </div>
 
       <section className="mb-5">
