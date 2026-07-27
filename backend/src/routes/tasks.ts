@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   ERROR_CODES,
   addAssigneeSchema,
+  addDependencySchema,
   attachLabelSchema,
   createChecklistItemSchema,
   createCommentSchema,
@@ -9,6 +10,7 @@ import {
   taskAssigneeParamSchema,
   taskChecklistItemParamSchema,
   taskCommentParamSchema,
+  taskDependencyParamSchema,
   taskLabelParamSchema,
   taskListQuerySchema,
   updateChecklistItemSchema,
@@ -17,6 +19,7 @@ import {
   uuidParamSchema,
   workspaceIdParamSchema,
   type AddAssigneeInput,
+  type AddDependencyInput,
   type AttachLabelInput,
   type CreateChecklistItemInput,
   type CreateCommentInput,
@@ -51,6 +54,7 @@ import { attachLabel, detachLabel, listLabelsForTask } from "../repositories/tas
 import { getLabelById } from "../repositories/labelRepository.js";
 import * as checklistItemRepository from "../repositories/checklistItemRepository.js";
 import * as taskCommentRepository from "../repositories/taskCommentRepository.js";
+import * as taskDependencyRepository from "../repositories/taskDependencyRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
@@ -256,6 +260,12 @@ tasksRouter.patch(
     const effectiveRecurrenceRule = updates.recurrence_rule !== undefined ? updates.recurrence_rule : task.recurrence_rule;
     if (effectiveRecurrenceRule && !effectiveDueAt) {
       throw new ApiError(ERROR_CODES.VALIDATION_FAILED, { message: "Для повторяющейся задачи нужен срок выполнения" });
+    }
+
+    if (updates.status === "done" && task.status !== "done") {
+      if (!(await taskDependencyRepository.areDependenciesResolved(task.id))) {
+        throw new ApiError(ERROR_CODES.TASK_BLOCKED_BY_DEPENDENCIES);
+      }
     }
 
     const recurrenceRoll = applyRecurrenceOnCompletion(task, updates);
@@ -583,6 +593,67 @@ tasksRouter.delete(
     await requireTaskManager(task, req.user!.id);
 
     await softDeleteTask(task.id);
+
+    res.status(204).send();
+  }),
+);
+
+// GET /api/tasks/:id/dependencies
+tasksRouter.get(
+  "/:id/dependencies",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const [dependsOn, blocks] = await Promise.all([
+      taskDependencyRepository.listDependencies(task.id),
+      taskDependencyRepository.listDependents(task.id),
+    ]);
+    res.json({ dependsOn, blocks });
+  }),
+);
+
+// POST /api/tasks/:id/dependencies — structural edit: manager only, same tier as labels/checklist.
+tasksRouter.post(
+  "/:id/dependencies",
+  validateParams(uuidParamSchema),
+  validateBody(addDependencySchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { dependsOnTaskId } = req.body as AddDependencyInput;
+    if (dependsOnTaskId === task.id) {
+      throw new ApiError(ERROR_CODES.DEPENDENCY_CYCLE);
+    }
+
+    const dependsOnTask = await getTaskOrThrow(dependsOnTaskId);
+    if (dependsOnTask.workspace_id !== task.workspace_id) {
+      throw new ApiError(ERROR_CODES.DEPENDENCY_CROSS_WORKSPACE);
+    }
+    if (await taskDependencyRepository.wouldCreateCycle(task.id, dependsOnTaskId)) {
+      throw new ApiError(ERROR_CODES.DEPENDENCY_CYCLE);
+    }
+
+    await taskDependencyRepository.addDependency(task.id, dependsOnTaskId);
+    const dependsOn = await taskDependencyRepository.listDependencies(task.id);
+    res.status(201).json({ dependsOn });
+  }),
+);
+
+// DELETE /api/tasks/:id/dependencies/:dependsOnTaskId
+tasksRouter.delete(
+  "/:id/dependencies/:dependsOnTaskId",
+  validateParams(taskDependencyParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+    await requireTaskManager(task, req.user!.id);
+
+    const { dependsOnTaskId } = req.params as { dependsOnTaskId: string };
+    await taskDependencyRepository.removeDependency(task.id, dependsOnTaskId);
 
     res.status(204).send();
   }),

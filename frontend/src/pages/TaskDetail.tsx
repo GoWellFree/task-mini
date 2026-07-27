@@ -17,6 +17,12 @@ import type {
 
 const STATUS_ORDER: TaskStatus[] = ["todo", "in_progress", "done"];
 
+interface DependencyTaskInfo {
+  id: string;
+  title: string;
+  status: TaskStatus;
+}
+
 export function TaskDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -28,6 +34,9 @@ export function TaskDetail() {
   const [workspaceLabels, setWorkspaceLabels] = useState<Label[]>([]);
   const [checklist, setChecklist] = useState<ChecklistItem[]>([]);
   const [comments, setComments] = useState<TaskCommentWithAuthor[]>([]);
+  const [dependsOn, setDependsOn] = useState<DependencyTaskInfo[]>([]);
+  const [blocks, setBlocks] = useState<DependencyTaskInfo[]>([]);
+  const [workspaceTasks, setWorkspaceTasks] = useState<Task[]>([]);
   const [error, setError] = useState<string | null>(null);
   // Separate from `error`: a recoverable, already-resolved condition (we DO
   // have fresh task data to show) rather than "failed to load the page".
@@ -42,18 +51,24 @@ export function TaskDetail() {
     try {
       const res = await api.get<{ task: Task }>(`/api/tasks/${id}`);
       setTask(res.task);
-      const [membersRes, labelsRes, workspaceLabelsRes, checklistRes, commentsRes] = await Promise.all([
-        api.get<{ members: WorkspaceMemberWithUser[] }>(`/api/workspaces/${res.task.workspace_id}/members`),
-        api.get<{ labels: Label[] }>(`/api/tasks/${id}/labels`),
-        api.get<{ labels: Label[] }>(`/api/v1/workspaces/${res.task.workspace_id}/labels`),
-        api.get<{ items: ChecklistItem[] }>(`/api/tasks/${id}/checklist`),
-        api.get<{ comments: TaskCommentWithAuthor[] }>(`/api/tasks/${id}/comments`),
-      ]);
+      const [membersRes, labelsRes, workspaceLabelsRes, checklistRes, commentsRes, dependenciesRes, workspaceTasksRes] =
+        await Promise.all([
+          api.get<{ members: WorkspaceMemberWithUser[] }>(`/api/workspaces/${res.task.workspace_id}/members`),
+          api.get<{ labels: Label[] }>(`/api/tasks/${id}/labels`),
+          api.get<{ labels: Label[] }>(`/api/v1/workspaces/${res.task.workspace_id}/labels`),
+          api.get<{ items: ChecklistItem[] }>(`/api/tasks/${id}/checklist`),
+          api.get<{ comments: TaskCommentWithAuthor[] }>(`/api/tasks/${id}/comments`),
+          api.get<{ dependsOn: DependencyTaskInfo[]; blocks: DependencyTaskInfo[] }>(`/api/tasks/${id}/dependencies`),
+          api.get<{ tasks: Task[] }>(`/api/workspaces/${res.task.workspace_id}/tasks`),
+        ]);
       setMembers(membersRes.members);
       setLabels(labelsRes.labels);
       setWorkspaceLabels(workspaceLabelsRes.labels);
       setChecklist(checklistRes.items);
       setComments(commentsRes.comments);
+      setDependsOn(dependenciesRes.dependsOn);
+      setBlocks(dependenciesRes.blocks);
+      setWorkspaceTasks(workspaceTasksRes.tasks);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить задачу");
     }
@@ -82,6 +97,10 @@ export function TaskDetail() {
         } catch {
           setError("Задача изменена в другом месте. Обновите страницу.");
         }
+      } else if (err instanceof ApiError && err.code === "TASK_BLOCKED_BY_DEPENDENCIES") {
+        // Also a recoverable, already-resolved condition — the task itself
+        // loaded fine, it just can't be completed yet.
+        setNotice(err.message);
       } else {
         setError(err instanceof ApiError ? err.message : "Не удалось обновить статус");
       }
@@ -168,6 +187,29 @@ export function TaskDetail() {
     }
   }
 
+  // --- dependencies ---
+  async function addDependency(dependsOnTaskId: string) {
+    if (!task) return;
+    try {
+      const res = await api.post<{ dependsOn: DependencyTaskInfo[] }>(`/api/tasks/${task.id}/dependencies`, {
+        dependsOnTaskId,
+      });
+      setDependsOn(res.dependsOn);
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : "Не удалось добавить зависимость");
+    }
+  }
+
+  async function removeDependency(dependsOnTaskId: string) {
+    if (!task) return;
+    try {
+      await api.delete(`/api/tasks/${task.id}/dependencies/${dependsOnTaskId}`);
+      setDependsOn((prev) => prev.filter((t) => t.id !== dependsOnTaskId));
+    } catch (err) {
+      setNotice(err instanceof ApiError ? err.message : "Не удалось удалить зависимость");
+    }
+  }
+
   // --- comments ---
   async function addComment(body: string, parentCommentId?: string) {
     if (!task || !user || !body.trim()) return;
@@ -224,6 +266,7 @@ export function TaskDetail() {
   const canDelete = isManager;
   const nextStatus = STATUS_ORDER[(STATUS_ORDER.indexOf(task.status) + 1) % STATUS_ORDER.length]!;
   const unattachedLabels = workspaceLabels.filter((wl) => !labels.some((l) => l.id === wl.id));
+  const dependencyCandidates = workspaceTasks.filter((t) => t.id !== task.id);
 
   return (
     <PageLayout title="Задача" onBack>
@@ -271,6 +314,15 @@ export function TaskDetail() {
         onAdd={addChecklistItem}
         onToggle={toggleChecklistItem}
         onDelete={deleteChecklistItem}
+      />
+
+      <DependenciesSection
+        dependsOn={dependsOn}
+        blocks={blocks}
+        candidates={dependencyCandidates}
+        canManage={isManager}
+        onAdd={addDependency}
+        onRemove={removeDependency}
       />
 
       <div className="mt-5 flex flex-col gap-2">
@@ -488,6 +540,92 @@ function ChecklistSection({
           >
             Добавить
           </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DependenciesSection({
+  dependsOn,
+  blocks,
+  candidates,
+  canManage,
+  onAdd,
+  onRemove,
+}: {
+  dependsOn: DependencyTaskInfo[];
+  blocks: DependencyTaskInfo[];
+  candidates: Pick<Task, "id" | "title" | "status">[];
+  canManage: boolean;
+  onAdd: (taskId: string) => void;
+  onRemove: (taskId: string) => void;
+}) {
+  const [picking, setPicking] = useState(false);
+  const pickable = candidates.filter((c) => !dependsOn.some((d) => d.id === c.id));
+
+  return (
+    <div className="mt-5">
+      <h3 className="text-sm font-medium text-tg-hint">Зависит от</h3>
+      <div className="mt-2 flex flex-col gap-1.5">
+        {dependsOn.map((t) => (
+          <div key={t.id} className="flex items-center gap-2 rounded-lg bg-tg-secondaryBg px-3 py-2">
+            <StatusBadge status={t.status} />
+            <span className="flex-1 text-sm">{t.title}</span>
+            {canManage && (
+              <button
+                onClick={() => onRemove(t.id)}
+                className="shrink-0 text-xs text-red-600"
+                aria-label={`Убрать зависимость от «${t.title}»`}
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        ))}
+        {dependsOn.length === 0 && <p className="text-sm text-tg-hint">Нет зависимостей</p>}
+      </div>
+
+      {canManage && (
+        <div className="mt-2">
+          <button
+            onClick={() => setPicking((p) => !p)}
+            className="rounded-full bg-tg-secondaryBg px-2.5 py-1 text-xs font-medium"
+          >
+            + Добавить зависимость
+          </button>
+
+          {picking && (
+            <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-tg-secondaryBg p-3">
+              {pickable.length === 0 && <p className="text-sm text-tg-hint">Нет других задач для выбора</p>}
+              {pickable.map((t) => (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    onAdd(t.id);
+                    setPicking(false);
+                  }}
+                  className="rounded-lg bg-tg-bg px-3 py-2 text-left text-sm"
+                >
+                  {t.title}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {blocks.length > 0 && (
+        <div className="mt-3">
+          <h4 className="text-xs font-medium text-tg-hint">Блокирует</h4>
+          <div className="mt-1.5 flex flex-col gap-1.5">
+            {blocks.map((t) => (
+              <div key={t.id} className="flex items-center gap-2 rounded-lg bg-tg-secondaryBg px-3 py-2">
+                <StatusBadge status={t.status} />
+                <span className="flex-1 text-sm">{t.title}</span>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>

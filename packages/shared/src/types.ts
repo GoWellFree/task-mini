@@ -132,6 +132,13 @@ export interface TaskReminder {
   sent_at: string;
 }
 
+/** `task_id` depends on (is blocked by) `depends_on_task_id` — the latter should be done first. */
+export interface TaskDependency {
+  task_id: string;
+  depends_on_task_id: string;
+  created_at: string;
+}
+
 export interface Label {
   id: string;
   workspace_id: string;

@@ -26,6 +26,10 @@ export const ERROR_CODES = {
   CHECKLIST_ITEM_NOT_FOUND: "CHECKLIST_ITEM_NOT_FOUND",
   COMMENT_NOT_FOUND: "COMMENT_NOT_FOUND",
   COMMENT_ACCESS_DENIED: "COMMENT_ACCESS_DENIED",
+  DEPENDENCY_NOT_FOUND: "DEPENDENCY_NOT_FOUND",
+  DEPENDENCY_CYCLE: "DEPENDENCY_CYCLE",
+  DEPENDENCY_CROSS_WORKSPACE: "DEPENDENCY_CROSS_WORKSPACE",
+  TASK_BLOCKED_BY_DEPENDENCIES: "TASK_BLOCKED_BY_DEPENDENCIES",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -67,6 +71,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   CHECKLIST_ITEM_NOT_FOUND: "Пункт чек-листа не найден",
   COMMENT_NOT_FOUND: "Комментарий не найден",
   COMMENT_ACCESS_DENIED: "Вы можете изменять только свои комментарии",
+  DEPENDENCY_NOT_FOUND: "Зависимость не найдена",
+  DEPENDENCY_CYCLE: "Это создаст циклическую зависимость между задачами",
+  DEPENDENCY_CROSS_WORKSPACE: "Зависимость можно добавить только между задачами одной группы",
+  TASK_BLOCKED_BY_DEPENDENCIES: "Сначала выполните задачи, от которых зависит эта",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -96,4 +104,8 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   CHECKLIST_ITEM_NOT_FOUND: 404,
   COMMENT_NOT_FOUND: 404,
   COMMENT_ACCESS_DENIED: 403,
+  DEPENDENCY_NOT_FOUND: 404,
+  DEPENDENCY_CYCLE: 409,
+  DEPENDENCY_CROSS_WORKSPACE: 400,
+  TASK_BLOCKED_BY_DEPENDENCIES: 409,
 };
