@@ -1,0 +1,9 @@
+**/node_modules
+**/dist
+.git
+frontend/src
+frontend/public
+frontend/index.html
+scripts
+supabase
+*.log
