@@ -99,8 +99,11 @@ export function TaskDetail() {
         }
       } else if (err instanceof ApiError && err.code === "TASK_BLOCKED_BY_DEPENDENCIES") {
         // Also a recoverable, already-resolved condition — the task itself
-        // loaded fine, it just can't be completed yet.
-        setNotice(err.message);
+        // loaded fine, it just can't be completed yet. Name the culprits so
+        // the user doesn't have to scroll down and diff status badges to
+        // find which dependency is still open.
+        const unresolved = dependsOn.filter((t) => t.status !== "done").map((t) => t.title);
+        setNotice(unresolved.length > 0 ? `${err.message}: ${unresolved.join(", ")}` : err.message);
       } else {
         setError(err instanceof ApiError ? err.message : "Не удалось обновить статус");
       }
@@ -266,7 +269,16 @@ export function TaskDetail() {
   const canDelete = isManager;
   const nextStatus = STATUS_ORDER[(STATUS_ORDER.indexOf(task.status) + 1) % STATUS_ORDER.length]!;
   const unattachedLabels = workspaceLabels.filter((wl) => !labels.some((l) => l.id === wl.id));
-  const dependencyCandidates = workspaceTasks.filter((t) => t.id !== task.id);
+  const dependencyCandidates = workspaceTasks.filter(
+    (t) =>
+      t.id !== task.id &&
+      // A task that already depends on this one would always be rejected as a
+      // cycle by the server; a cancelled/archived task can never become
+      // "done" through normal use, which would permanently block completion.
+      !blocks.some((b) => b.id === t.id) &&
+      t.status !== "cancelled" &&
+      !t.archived_at,
+  );
 
   return (
     <PageLayout title="Задача" onBack>
@@ -596,7 +608,7 @@ function DependenciesSection({
           </button>
 
           {picking && (
-            <div className="mt-2 flex flex-col gap-1.5 rounded-xl bg-tg-secondaryBg p-3">
+            <div className="mt-2 flex max-h-48 flex-col gap-1.5 overflow-y-auto rounded-xl bg-tg-secondaryBg p-3">
               {pickable.length === 0 && <p className="text-sm text-tg-hint">Нет других задач для выбора</p>}
               {pickable.map((t) => (
                 <button
