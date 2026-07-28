@@ -13,6 +13,8 @@
     "build:shared": "npm --workspace @task-mini/shared run build",
     "build:frontend": "npm run build:shared && npm --workspace frontend run build",
     "build:backend": "npm run build:shared && npm --workspace backend run build",
+    "build": "npm run build:backend",
+    "start": "npm --workspace backend run start",
     "typecheck:shared": "npm --workspace @task-mini/shared run typecheck",
     "typecheck:frontend": "npm run build:shared && npm --workspace frontend run typecheck",
     "typecheck:backend": "npm run build:shared && npm --workspace backend run typecheck",
