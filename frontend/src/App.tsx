@@ -4,6 +4,7 @@ import { useAuth } from "./lib/AuthContext";
 import { api } from "./lib/api";
 import { Loading, ErrorMessage } from "./components/Feedback";
 import { BottomNavigation } from "./components/navigation/BottomNavigation";
+import { ConnectionStatusBar } from "./components/ConnectionStatusBar";
 import { Home } from "./pages/Home";
 import { MyTasks } from "./pages/MyTasks";
 import { Workspaces } from "./pages/Workspaces";
@@ -22,6 +23,7 @@ export function App() {
 
   return (
     <>
+      <ConnectionStatusBar />
       <StartParamHandler startParam={startParam} />
       <Routes>
         <Route path="/" element={<Home />} />

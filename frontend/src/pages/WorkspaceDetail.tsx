@@ -209,7 +209,7 @@ export function WorkspaceDetail() {
                     </h3>
                     <div className="flex flex-col divide-y divide-border-subtle">
                       {col.tasks.map((t) => (
-                        <TaskItem key={t.id} task={t} onToggle={toggleTask} showWorkspace={false} />
+                        <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={loadTasks} showWorkspace={false} />
                       ))}
                     </div>
                   </section>
@@ -220,7 +220,7 @@ export function WorkspaceDetail() {
                 <h3 className="mb-1 text-[13px] font-semibold uppercase tracking-wide text-content-secondary">Другое</h3>
                 <div className="flex flex-col divide-y divide-border-subtle">
                   {otherStatusTasks.map((t) => (
-                    <TaskItem key={t.id} task={t} onToggle={toggleTask} showWorkspace={false} />
+                    <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={loadTasks} showWorkspace={false} />
                   ))}
                 </div>
               </section>

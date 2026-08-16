@@ -149,7 +149,7 @@ export function Home() {
               <SectionHeader title="Просрочено" count={grouped.overdue.length} tone="danger" />
               <div className="flex flex-col divide-y divide-border-subtle">
                 {grouped.overdue.map((t) => (
-                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={load} />
                 ))}
               </div>
             </section>
@@ -168,7 +168,7 @@ export function Home() {
             ) : (
               <div className="flex flex-col divide-y divide-border-subtle">
                 {grouped.today.map((t) => (
-                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={load} />
                 ))}
               </div>
             )}
@@ -186,7 +186,7 @@ export function Home() {
               />
               <div className="flex flex-col divide-y divide-border-subtle">
                 {grouped.later.slice(0, LATER_LIMIT).map((t) => (
-                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={load} />
                 ))}
               </div>
             </section>
@@ -206,7 +206,7 @@ export function Home() {
               {showCompleted && (
                 <div className="flex flex-col divide-y divide-border-subtle">
                   {grouped.completedToday.map((t) => (
-                    <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                    <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={load} />
                   ))}
                 </div>
               )}

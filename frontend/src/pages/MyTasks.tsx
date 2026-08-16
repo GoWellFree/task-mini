@@ -135,7 +135,7 @@ export function MyTasks() {
       {filtered && filtered.length > 0 && (
         <div className="flex flex-col divide-y divide-border-subtle">
           {filtered.map((t) => (
-            <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+            <TaskItem key={t.id} task={t} onToggle={toggleTask} onChanged={load} />
           ))}
         </div>
       )}
