@@ -1,5 +1,13 @@
 import { Link } from "react-router-dom";
-import type { TaskStatus, TaskWithWorkspace } from "../types";
+import type { TaskPriority, TaskStatus, TaskWithWorkspace } from "../types";
+
+export const PRIORITY_LABELS: Record<TaskPriority, string> = {
+  none: "Без приоритета",
+  low: "Низкий",
+  medium: "Средний",
+  high: "Высокий",
+  urgent: "Срочный",
+};
 
 // The create/edit UI only offers todo/in_progress/done for now (kanban and a
 // full status picker are later work) — the rest are labeled here so any task

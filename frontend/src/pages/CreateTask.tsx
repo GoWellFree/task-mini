@@ -2,7 +2,14 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { api, ApiError } from "../lib/api";
 import { PageLayout } from "../components/PageLayout";
-import type { Task, TaskStatus, Workspace, WorkspaceMemberWithUser } from "../types";
+import type { RecurrenceRule, Task, TaskStatus, Workspace, WorkspaceMemberWithUser } from "../types";
+
+const RECURRENCE_LABELS: Record<RecurrenceRule, string> = {
+  daily: "Ежедневно",
+  weekly: "Еженедельно",
+  monthly: "Ежемесячно",
+  yearly: "Ежегодно",
+};
 
 export function CreateTask() {
   const navigate = useNavigate();
@@ -18,6 +25,9 @@ export function CreateTask() {
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [status, setStatus] = useState<TaskStatus>("todo");
+  const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | "">("");
+  const [recurrenceInterval, setRecurrenceInterval] = useState("1");
+  const [recurrenceUntil, setRecurrenceUntil] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,6 +64,15 @@ export function CreateTask() {
         assigneeId: assigneeId || undefined,
         status,
         dueAt,
+        // Only meaningful with a due date to anchor the recurrence — the
+        // backend rejects a rule with none, so it's kept hidden until one is set.
+        ...(dueAt && recurrenceRule
+          ? {
+              recurrenceRule,
+              recurrenceInterval: Number(recurrenceInterval) || 1,
+              ...(recurrenceUntil ? { recurrenceUntil: new Date(recurrenceUntil).toISOString() } : {}),
+            }
+          : {}),
       });
       navigate(`/tasks/${res.task.id}`, { replace: true });
     } catch (err) {
@@ -137,6 +156,46 @@ export function CreateTask() {
             />
           </Field>
         </div>
+
+        {date && (
+          <Field label="Повторение">
+            <select
+              value={recurrenceRule}
+              onChange={(e) => setRecurrenceRule(e.target.value as RecurrenceRule | "")}
+              className="w-full rounded-xl bg-tg-secondaryBg px-3.5 py-2.5 text-sm"
+            >
+              <option value="">Не повторяется</option>
+              {(Object.keys(RECURRENCE_LABELS) as RecurrenceRule[]).map((rule) => (
+                <option key={rule} value={rule}>
+                  {RECURRENCE_LABELS[rule]}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+
+        {date && recurrenceRule && (
+          <div className="flex gap-3">
+            <Field label="Каждые N раз" className="flex-1">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={recurrenceInterval}
+                onChange={(e) => setRecurrenceInterval(e.target.value)}
+                className="w-full rounded-xl bg-tg-secondaryBg px-3.5 py-2.5 text-sm"
+              />
+            </Field>
+            <Field label="Повторять до (необязательно)" className="flex-1">
+              <input
+                type="date"
+                value={recurrenceUntil}
+                onChange={(e) => setRecurrenceUntil(e.target.value)}
+                className="w-full rounded-xl bg-tg-secondaryBg px-3.5 py-2.5 text-sm"
+              />
+            </Field>
+          </div>
+        )}
 
         <Field label="Статус">
           <select

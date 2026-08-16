@@ -1,7 +1,13 @@
 import { Router } from "express";
-import { updateUserSettingsSchema, type UpdateUserSettingsInput } from "@task-mini/shared";
+import {
+  updateUserProfileSchema,
+  updateUserSettingsSchema,
+  type UpdateUserProfileInput,
+  type UpdateUserSettingsInput,
+} from "@task-mini/shared";
 import { requireAuth } from "../middleware/auth.js";
 import { asyncHandler, validateBody } from "../middleware/validate.js";
+import { updateUser } from "../repositories/userRepository.js";
 import { getSettingsOrDefaults, upsertSettings } from "../repositories/userSettingsRepository.js";
 import type { UserSettings } from "../types/index.js";
 
@@ -26,6 +32,17 @@ function toColumnPatch(body: UpdateUserSettingsInput): SettingsPatch {
   if (body.theme !== undefined) patch.theme = body.theme;
   return patch;
 }
+
+// PATCH /api/users/me
+usersRouter.patch(
+  "/me",
+  validateBody(updateUserProfileSchema),
+  asyncHandler(async (req, res) => {
+    const body = req.body as UpdateUserProfileInput;
+    const user = await updateUser(req.user!.id, { timezone: body.timezone });
+    res.json({ user });
+  }),
+);
 
 // GET /api/users/me/settings
 usersRouter.get(

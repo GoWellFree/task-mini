@@ -125,6 +125,22 @@ export const updateUserSettingsSchema = z
   .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
 export type UpdateUserSettingsInput = z.infer<typeof updateUserSettingsSchema>;
 
+function isValidTimeZone(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const updateUserProfileSchema = z
+  .object({
+    timezone: z.string().refine(isValidTimeZone, "Некорректный часовой пояс").optional(),
+  })
+  .refine((body) => Object.keys(body).length > 0, { message: "Нет данных для обновления" });
+export type UpdateUserProfileInput = z.infer<typeof updateUserProfileSchema>;
+
 const projectStatus = z.enum(PROJECT_STATUS_VALUES);
 
 export const createProjectSchema = z.object({
@@ -215,9 +231,13 @@ export const taskListQuerySchema = z.object({
 });
 export type TaskListQuery = z.infer<typeof taskListQuerySchema>;
 
+export const addDependencySchema = z.object({ dependsOnTaskId: uuid });
+export type AddDependencyInput = z.infer<typeof addDependencySchema>;
+
 export const uuidParamSchema = z.object({ id: uuid });
 export const workspaceIdParamSchema = z.object({ workspaceId: uuid });
 export const taskAssigneeParamSchema = z.object({ id: uuid, userId: uuid });
 export const taskLabelParamSchema = z.object({ id: uuid, labelId: uuid });
 export const taskChecklistItemParamSchema = z.object({ id: uuid, itemId: uuid });
 export const taskCommentParamSchema = z.object({ id: uuid, commentId: uuid });
+export const taskDependencyParamSchema = z.object({ id: uuid, dependsOnTaskId: uuid });
