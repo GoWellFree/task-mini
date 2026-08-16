@@ -2,7 +2,19 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   NOVA Tasks design tokens.
+   Two independent inputs drive theming: Telegram's own light/dark signal
+   (read once at boot, see lib/theme.ts) and the user's explicit override in
+   Profile settings ("as Telegram" / "light" / "dark"). Both only ever flip
+   a `data-theme` attribute on <html> — every color below is a token, never
+   a raw hex baked into a component.
+   ========================================================================== */
+
 :root {
+  /* Telegram's own injected vars — kept for the handful of places that
+     intentionally want to match Telegram's chrome exactly (e.g. the native
+     back gesture area), not used as the app's primary palette. */
   --tg-bg-color: #ffffff;
   --tg-text-color: #111111;
   --tg-hint-color: #708499;
@@ -10,19 +22,141 @@
   --tg-button-color: #2481cc;
   --tg-button-text-color: #ffffff;
   --tg-secondary-bg-color: #f4f4f5;
+
+  /* Surfaces */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f7f9;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgb(15 15 20 / 45%);
+
+  /* Text */
+  --text-primary: #14141a;
+  --text-secondary: #63636f;
+  --text-tertiary: #9797a3;
+  --text-inverse: #ffffff;
+
+  --border-subtle: #e7e7ec;
+
+  /* Brand */
+  --accent-primary: #5b5fef;
+  --accent-primary-hover: #4c4fe0;
+  --accent-primary-soft: #eeeeff;
+  --accent-secondary: #14b8a6;
+
+  /* Semantic */
+  --success: #17a673;
+  --success-soft: #e6f7f1;
+  --warning: #d97706;
+  --warning-soft: #fef3e2;
+  --danger: #e0363b;
+  --danger-soft: #fdeced;
+
+  /* Priority (spec's 4 user-facing levels; "none" renders with no tag at all) */
+  --priority-low: #8b93a7;
+  --priority-medium: #2f7de1;
+  --priority-high: #d97706;
+  --priority-critical: #e0363b;
+
+  /* Radius scale */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 999px;
+
+  /* Shadow — reserved for floating/overlay surfaces only (FAB, sheet, modal, menu) */
+  --shadow-float: 0 8px 24px rgb(20 20 26 / 12%), 0 2px 6px rgb(20 20 26 / 8%);
+  --shadow-sheet: 0 -8px 30px rgb(20 20 26 / 14%);
+
+  color-scheme: light;
+}
+
+/* System preference, only when the user hasn't made an explicit choice. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg-primary: #17171c;
+    --bg-secondary: #0f0f13;
+    --bg-elevated: #202027;
+    --bg-overlay: rgb(0 0 0 / 60%);
+
+    --text-primary: #f3f3f6;
+    --text-secondary: #a6a6b3;
+    --text-tertiary: #6f6f7c;
+    --text-inverse: #14141a;
+
+    --border-subtle: #2b2b33;
+
+    --accent-primary: #7b7ff5;
+    --accent-primary-hover: #8d90f7;
+    --accent-primary-soft: #26264a;
+    --accent-secondary: #2dd4bf;
+
+    --success: #34d399;
+    --success-soft: #113028;
+    --warning: #fbbf24;
+    --warning-soft: #332508;
+    --danger: #f87171;
+    --danger-soft: #3a1416;
+
+    --priority-low: #8b93a7;
+    --priority-medium: #5b9bf0;
+    --priority-high: #fbbf24;
+    --priority-critical: #f87171;
+
+    color-scheme: dark;
+  }
+}
+
+/* Explicit user choice always wins, in either direction. */
+:root[data-theme="dark"] {
+  --bg-primary: #17171c;
+  --bg-secondary: #0f0f13;
+  --bg-elevated: #202027;
+  --bg-overlay: rgb(0 0 0 / 60%);
+
+  --text-primary: #f3f3f6;
+  --text-secondary: #a6a6b3;
+  --text-tertiary: #6f6f7c;
+  --text-inverse: #14141a;
+
+  --border-subtle: #2b2b33;
+
+  --accent-primary: #7b7ff5;
+  --accent-primary-hover: #8d90f7;
+  --accent-primary-soft: #26264a;
+  --accent-secondary: #2dd4bf;
+
+  --success: #34d399;
+  --success-soft: #113028;
+  --warning: #fbbf24;
+  --warning-soft: #332508;
+  --danger: #f87171;
+  --danger-soft: #3a1416;
+
+  --priority-low: #8b93a7;
+  --priority-medium: #5b9bf0;
+  --priority-high: #fbbf24;
+  --priority-critical: #f87171;
+
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
 }
 
 html,
 body,
 #root {
   height: 100%;
-  background-color: var(--tg-bg-color);
-  color: var(--tg-text-color);
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
 }
 
 body {
   margin: 0;
   font-family:
+    Inter,
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
@@ -30,4 +164,95 @@ body {
     Helvetica,
     Arial,
     sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+}
+
+button {
+  font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Motion primitives used by components/ui/* — kept centralized so timings
+   stay consistent (spec: 120-250ms, fade/slide/scale only). */
+@keyframes nova-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes nova-slide-up {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+@keyframes nova-sheet-in {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes nova-scale-in {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+@keyframes nova-skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.animate-nova-fade-in {
+  animation: nova-fade-in 180ms ease-out;
+}
+.animate-nova-slide-up {
+  animation: nova-slide-up 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-nova-sheet-in {
+  animation: nova-sheet-in 240ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-nova-scale-in {
+  animation: nova-scale-in 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.animate-nova-skeleton {
+  animation: nova-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-nova-fade-in,
+  .animate-nova-slide-up,
+  .animate-nova-sheet-in,
+  .animate-nova-scale-in,
+  .animate-nova-skeleton {
+    animation: none;
+  }
 }

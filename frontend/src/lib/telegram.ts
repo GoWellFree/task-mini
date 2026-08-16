@@ -12,13 +12,56 @@ interface TelegramThemeParams {
   secondary_bg_color?: string;
 }
 
+interface TelegramHapticFeedback {
+  impactOccurred: (style: "light" | "medium" | "heavy" | "rigid" | "soft") => void;
+  notificationOccurred: (type: "error" | "success" | "warning") => void;
+  selectionChanged: () => void;
+}
+
+interface TelegramBackButton {
+  isVisible: boolean;
+  show: () => void;
+  hide: () => void;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+}
+
+interface TelegramMainButton {
+  text: string;
+  isVisible: boolean;
+  isActive: boolean;
+  show: () => void;
+  hide: () => void;
+  enable: () => void;
+  disable: () => void;
+  setText: (text: string) => void;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+}
+
+interface TelegramSafeAreaInset {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 interface TelegramWebApp {
   initData: string;
   initDataUnsafe: { start_param?: string };
   themeParams: TelegramThemeParams;
+  colorScheme?: "light" | "dark";
+  viewportHeight?: number;
+  viewportStableHeight?: number;
+  safeAreaInset?: TelegramSafeAreaInset;
+  contentSafeAreaInset?: TelegramSafeAreaInset;
+  BackButton: TelegramBackButton;
+  MainButton: TelegramMainButton;
+  HapticFeedback: TelegramHapticFeedback;
   ready: () => void;
   expand: () => void;
   onEvent: (event: string, handler: () => void) => void;
+  offEvent: (event: string, handler: () => void) => void;
 }
 
 declare global {
@@ -38,7 +81,9 @@ export function initTelegramApp(): void {
   webApp.ready();
   webApp.expand();
   applyThemeParams(webApp.themeParams);
+  applySafeArea(webApp);
   webApp.onEvent("themeChanged", () => applyThemeParams(webApp.themeParams));
+  webApp.onEvent("viewportChanged", () => applySafeArea(webApp));
 }
 
 function applyThemeParams(theme: TelegramThemeParams): void {
@@ -58,6 +103,16 @@ function applyThemeParams(theme: TelegramThemeParams): void {
   }
 }
 
+function applySafeArea(webApp: TelegramWebApp): void {
+  const root = document.documentElement;
+  const inset = webApp.safeAreaInset;
+  root.style.setProperty("--tg-safe-area-top", `${inset?.top ?? 0}px`);
+  root.style.setProperty("--tg-safe-area-bottom", `${inset?.bottom ?? 0}px`);
+  if (webApp.viewportStableHeight) {
+    root.style.setProperty("--tg-viewport-height", `${webApp.viewportStableHeight}px`);
+  }
+}
+
 export function getInitData(): string | undefined {
   return getWebApp()?.initData || undefined;
 }
@@ -68,4 +123,25 @@ export function getStartParam(): string | undefined {
 
 export function isRunningInTelegram(): boolean {
   return Boolean(getWebApp()?.initData);
+}
+
+/** Telegram's own light/dark classification — used only to pick which NOVA token set applies, never as a color source itself. */
+export function getTelegramColorScheme(): "light" | "dark" | undefined {
+  return getWebApp()?.colorScheme;
+}
+
+/**
+ * Shows Telegram's native back chevron and wires it to `onBack`. Returns a
+ * cleanup function. A no-op outside Telegram so callers don't need to branch.
+ */
+export function useTelegramBackButton(onBack: (() => void) | undefined): () => void {
+  const webApp = getWebApp();
+  if (!webApp || !onBack) return () => {};
+
+  webApp.BackButton.show();
+  webApp.BackButton.onClick(onBack);
+  return () => {
+    webApp.BackButton.offClick(onBack);
+    webApp.BackButton.hide();
+  };
 }
