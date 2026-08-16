@@ -5,7 +5,10 @@ export type ButtonSize = "sm" | "md" | "lg";
 
 const VARIANT_CLASSES: Record<ButtonVariant, string> = {
   primary: "bg-accent text-white hover:bg-accent-hover active:opacity-90",
-  secondary: "bg-surface-secondary text-content-primary active:opacity-80",
+  // Bordered: the page background itself uses the same surface-secondary
+  // token, so an unbordered secondary button sitting directly on the page
+  // (outside a Card/BottomSheet) would have no visible edge in either theme.
+  secondary: "border border-border-subtle bg-surface-secondary text-content-primary active:opacity-80",
   ghost: "bg-transparent text-content-primary hover:bg-surface-secondary active:opacity-70",
   danger: "bg-danger text-white active:opacity-90",
 };

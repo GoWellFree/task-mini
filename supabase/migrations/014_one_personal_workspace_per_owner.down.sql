@@ -1,0 +1,1 @@
+drop index if exists idx_workspaces_one_personal_per_owner;

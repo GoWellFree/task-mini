@@ -369,7 +369,7 @@ export function TaskDetail() {
         <button
           onClick={cycleStatus}
           disabled={updating}
-          className="mt-4 flex h-11 w-full items-center justify-center rounded-lg bg-surface-secondary text-sm font-medium text-content-primary disabled:opacity-50"
+          className="mt-4 flex h-11 w-full items-center justify-center rounded-lg border border-border-subtle bg-surface-primary text-sm font-medium text-content-primary disabled:opacity-50"
         >
           {updating ? "Обновление..." : `Перевести в «${STATUS_LABELS_CYCLE[STATUS_CYCLE[(STATUS_CYCLE.indexOf(task.status) + 1) % STATUS_CYCLE.length]!]}»`}
         </button>
@@ -458,7 +458,8 @@ function LabelsSection({
             />
             <button
               onClick={() => { if (!newLabelName.trim()) return; onCreate(newLabelName); setNewLabelName(""); setPicking(false); }}
-              className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white"
+              disabled={!newLabelName.trim()}
+              className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-40"
             >
               Создать
             </button>
@@ -511,7 +512,8 @@ function ChecklistSection({
           />
           <button
             onClick={() => { if (!newItemTitle.trim()) return; onAdd(newItemTitle); setNewItemTitle(""); }}
-            className="h-10 shrink-0 rounded-lg bg-surface-secondary px-3 text-sm font-medium text-content-primary"
+            disabled={!newItemTitle.trim()}
+            className="h-10 shrink-0 rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm font-medium text-content-primary disabled:opacity-40"
           >
             Добавить
           </button>
@@ -615,7 +617,13 @@ function CommentsSection({
             <div className="mt-2 flex flex-col gap-2">
               <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} className="w-full rounded-lg border border-border-subtle bg-surface-primary px-3 py-2 text-sm" rows={2} />
               <div className="flex gap-2">
-                <button onClick={() => { onEdit(comment.id, editBody); setEditingId(null); }} className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white">Сохранить</button>
+                <button
+                  onClick={() => { onEdit(comment.id, editBody); setEditingId(null); }}
+                  disabled={!editBody.trim()}
+                  className="rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-white disabled:opacity-40"
+                >
+                  Сохранить
+                </button>
                 <button onClick={() => setEditingId(null)} className="rounded-lg bg-surface-primary px-3 py-1.5 text-xs font-medium">Отмена</button>
               </div>
             </div>
@@ -637,7 +645,8 @@ function CommentsSection({
             <input value={replyBody} onChange={(e) => setReplyBody(e.target.value)} placeholder="Ответить..." className="h-10 flex-1 rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm" />
             <button
               onClick={() => { if (!replyBody.trim()) return; onAdd(replyBody, comment.id); setReplyBody(""); setReplyingTo(null); }}
-              className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white"
+              disabled={!replyBody.trim()}
+              className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-40"
             >
               Отправить
             </button>
@@ -660,7 +669,8 @@ function CommentsSection({
           <input value={newBody} onChange={(e) => setNewBody(e.target.value)} placeholder="Написать комментарий..." className="h-10 flex-1 rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm" />
           <button
             onClick={() => { if (!newBody.trim()) return; onAdd(newBody); setNewBody(""); }}
-            className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white"
+            disabled={!newBody.trim()}
+            className="h-10 shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white disabled:opacity-40"
           >
             Отправить
           </button>

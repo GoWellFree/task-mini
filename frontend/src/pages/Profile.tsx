@@ -9,6 +9,7 @@ import { Switch } from "../components/ui/Switch";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { TimePicker } from "../components/ui/TimePicker";
 import { Input } from "../components/ui/Input";
+import { ActionSheet } from "../components/ui/ActionSheet";
 import { useToast } from "../components/ui/Toast";
 import { getThemePreference, setThemePreference, type ThemePreference } from "../lib/theme";
 import type { UserSettings } from "../types";
@@ -25,6 +26,7 @@ export function Profile() {
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [timezone, setTimezone] = useState("");
   const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
+  const [confirmingLogoutEverywhere, setConfirmingLogoutEverywhere] = useState(false);
 
   useEffect(() => {
     api
@@ -171,10 +173,17 @@ export function Profile() {
         <button onClick={logout} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface-secondary text-sm font-medium text-danger">
           <LogOut size={16} /> Выйти
         </button>
-        <button onClick={logoutEverywhere} className="h-11 w-full rounded-lg text-sm font-medium text-danger">
+        <button onClick={() => setConfirmingLogoutEverywhere(true)} className="h-11 w-full rounded-lg text-sm font-medium text-danger">
           Выйти на всех устройствах
         </button>
       </div>
+
+      <ActionSheet
+        open={confirmingLogoutEverywhere}
+        onClose={() => setConfirmingLogoutEverywhere(false)}
+        title="Выйти на всех устройствах? Все активные сессии будут завершены."
+        items={[{ label: "Выйти на всех устройствах", tone: "danger", onSelect: logoutEverywhere }]}
+      />
     </div>
   );
 }

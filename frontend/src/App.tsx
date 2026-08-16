@@ -16,9 +16,17 @@ import type { Workspace } from "./types";
 export function App() {
   const { user, loading, error, startParam, retry } = useAuth();
 
-  if (loading) return <Loading label="Авторизация через Telegram..." />;
-  if (error || !user) {
-    return <ErrorMessage message={error ?? "Не удалось авторизоваться"} onRetry={retry} />;
+  if (loading || error || !user) {
+    return (
+      <div className="flex min-h-screen w-full flex-col items-center justify-center gap-4 px-6">
+        <span className="text-2xl font-extrabold tracking-tight text-content-primary">NOVA</span>
+        {loading ? (
+          <Loading label="Авторизация через Telegram..." />
+        ) : (
+          <ErrorMessage message={error ?? "Не удалось авторизоваться"} onRetry={retry} />
+        )}
+      </div>
+    );
   }
 
   return (

@@ -18,6 +18,18 @@ export async function getWorkspaceById(id: string): Promise<Workspace | null> {
   return (data as Workspace | null) ?? null;
 }
 
+export async function findPersonalWorkspaceByOwner(ownerId: string): Promise<Workspace | null> {
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("*")
+    .eq("owner_id", ownerId)
+    .eq("type", "personal")
+    .maybeSingle();
+
+  if (error) throw error;
+  return (data as Workspace | null) ?? null;
+}
+
 export async function findWorkspaceByInviteCode(inviteCode: string): Promise<Workspace | null> {
   const { data } = await supabase.from("workspaces").select("*").eq("invite_code", inviteCode).maybeSingle();
   return (data as Workspace | null) ?? null;

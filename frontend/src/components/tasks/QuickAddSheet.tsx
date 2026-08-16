@@ -6,6 +6,7 @@ import { Button } from "../ui/Button";
 import { Textarea } from "../ui/Textarea";
 import { DatePicker } from "../ui/DatePicker";
 import { TimePicker } from "../ui/TimePicker";
+import { ActionSheet, type ActionSheetItem } from "../ui/ActionSheet";
 import { PRIORITY_DISPLAY } from "../ui/PriorityBadge";
 import { api, ApiError } from "../../lib/api";
 import { haptics } from "../../lib/haptics";
@@ -46,6 +47,9 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
   const [priority, setPriority] = useState<TaskPriority>("none");
   const [datePickerOpen, setDatePickerOpen] = useState(false);
   const [priorityPickerOpen, setPriorityPickerOpen] = useState(false);
+  const [workspacePickerOpen, setWorkspacePickerOpen] = useState(false);
+  const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
+  const [recurrencePickerOpen, setRecurrencePickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [assigneeId, setAssigneeId] = useState("");
   const [description, setDescription] = useState("");
@@ -153,17 +157,14 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
         />
 
         {workspaces.length > 1 && (
-          <select
-            value={workspaceId}
-            onChange={(e) => setWorkspaceId(e.target.value)}
-            className="h-10 w-full rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
+          <button
+            type="button"
+            onClick={() => setWorkspacePickerOpen(true)}
+            className="flex h-10 w-full items-center justify-between rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
           >
-            {workspaces.map((w) => (
-              <option key={w.id} value={w.id}>
-                {w.name}
-              </option>
-            ))}
-          </select>
+            {workspaces.find((w) => w.id === workspaceId)?.name ?? "Выберите пространство"}
+            <ChevronDown size={15} className="text-content-tertiary" />
+          </button>
         )}
 
         <div className="flex flex-wrap gap-2">
@@ -206,18 +207,16 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
         {advancedOpen && (
           <div className="flex flex-col gap-3">
             {members.length > 0 && (
-              <select
-                value={assigneeId}
-                onChange={(e) => setAssigneeId(e.target.value)}
-                className="h-10 w-full rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
+              <button
+                type="button"
+                onClick={() => setAssigneePickerOpen(true)}
+                className="flex h-10 w-full items-center justify-between rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
               >
-                <option value="">Исполнитель не назначен</option>
-                {members.map((m) => (
-                  <option key={m.user_id} value={m.user_id}>
-                    {m.user.first_name} {m.user.last_name ?? ""}
-                  </option>
-                ))}
-              </select>
+                {members.find((m) => m.user_id === assigneeId)
+                  ? `${members.find((m) => m.user_id === assigneeId)!.user.first_name} ${members.find((m) => m.user_id === assigneeId)!.user.last_name ?? ""}`
+                  : "Исполнитель не назначен"}
+                <ChevronDown size={15} className="text-content-tertiary" />
+              </button>
             )}
 
             <Textarea
@@ -228,18 +227,14 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
             />
 
             {dueDate && (
-              <select
-                value={recurrenceRule}
-                onChange={(e) => setRecurrenceRule(e.target.value as RecurrenceRule | "")}
-                className="h-10 w-full rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
+              <button
+                type="button"
+                onClick={() => setRecurrencePickerOpen(true)}
+                className="flex h-10 w-full items-center justify-between rounded-lg border border-border-subtle bg-surface-primary px-3 text-sm text-content-primary"
               >
-                <option value="">Не повторять</option>
-                {(Object.keys(RECURRENCE_LABELS) as RecurrenceRule[]).map((r) => (
-                  <option key={r} value={r}>
-                    {RECURRENCE_LABELS[r]}
-                  </option>
-                ))}
-              </select>
+                {recurrenceRule ? RECURRENCE_LABELS[recurrenceRule] : "Не повторять"}
+                <ChevronDown size={15} className="text-content-tertiary" />
+              </button>
             )}
 
             <div>
@@ -302,6 +297,39 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
         onClose={() => setDatePickerOpen(false)}
         value={dueDate}
         onChange={setDueDate}
+      />
+      <ActionSheet
+        open={workspacePickerOpen}
+        onClose={() => setWorkspacePickerOpen(false)}
+        title="Пространство"
+        items={workspaces.map(
+          (w): ActionSheetItem => ({ label: w.name, onSelect: () => setWorkspaceId(w.id) }),
+        )}
+      />
+      <ActionSheet
+        open={assigneePickerOpen}
+        onClose={() => setAssigneePickerOpen(false)}
+        title="Исполнитель"
+        items={[
+          { label: "Не назначен", onSelect: () => setAssigneeId("") },
+          ...members.map(
+            (m): ActionSheetItem => ({
+              label: `${m.user.first_name} ${m.user.last_name ?? ""}`.trim(),
+              onSelect: () => setAssigneeId(m.user_id),
+            }),
+          ),
+        ]}
+      />
+      <ActionSheet
+        open={recurrencePickerOpen}
+        onClose={() => setRecurrencePickerOpen(false)}
+        title="Повторение"
+        items={[
+          { label: "Не повторять", onSelect: () => setRecurrenceRule("") },
+          ...(Object.keys(RECURRENCE_LABELS) as RecurrenceRule[]).map(
+            (r): ActionSheetItem => ({ label: RECURRENCE_LABELS[r], onSelect: () => setRecurrenceRule(r) }),
+          ),
+        ]}
       />
     </BottomSheet>
   );

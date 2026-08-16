@@ -4,6 +4,7 @@ const repo = vi.hoisted(() => ({
   createWorkspace: vi.fn(),
   addMember: vi.fn(),
   deleteWorkspace: vi.fn(),
+  findPersonalWorkspaceByOwner: vi.fn(),
 }));
 
 vi.mock("../repositories/workspaceRepository.js", () => repo);
@@ -80,5 +81,41 @@ describe("createPersonalWorkspace", () => {
       "personal",
     );
     expect(repo.addMember).toHaveBeenCalledWith("ws-personal", "user-1", "owner");
+  });
+
+  it("returns the winner's workspace instead of erroring when a concurrent request already created one", async () => {
+    // Regression test: two concurrent /api/auth/telegram calls for the same
+    // brand-new user can both reach onboardNewUser -> createPersonalWorkspace
+    // before either commits (see migration 014). The loser's insert hits the
+    // one-personal-workspace-per-owner unique index and must recover by
+    // fetching what the winner created, not by surfacing a 500.
+    const uniqueViolation = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+    });
+    repo.createWorkspace.mockRejectedValue(uniqueViolation);
+    repo.findPersonalWorkspaceByOwner.mockResolvedValue({ id: "ws-winner", owner_id: "user-1", type: "personal" });
+
+    const workspace = await createPersonalWorkspace("user-1");
+
+    expect(workspace).toMatchObject({ id: "ws-winner" });
+    expect(repo.findPersonalWorkspaceByOwner).toHaveBeenCalledWith("user-1");
+    expect(repo.addMember).not.toHaveBeenCalled();
+  });
+
+  it("still throws a unique-violation if no existing personal workspace can be found (shouldn't happen, but don't swallow silently)", async () => {
+    const uniqueViolation = Object.assign(new Error("duplicate key value violates unique constraint"), {
+      code: "23505",
+    });
+    repo.createWorkspace.mockRejectedValue(uniqueViolation);
+    repo.findPersonalWorkspaceByOwner.mockResolvedValue(null);
+
+    await expect(createPersonalWorkspace("user-1")).rejects.toThrow("duplicate key value violates unique constraint");
+  });
+
+  it("still throws other, non-unique-violation errors normally", async () => {
+    repo.createWorkspace.mockRejectedValue(new Error("db unavailable"));
+
+    await expect(createPersonalWorkspace("user-1")).rejects.toThrow("db unavailable");
+    expect(repo.findPersonalWorkspaceByOwner).not.toHaveBeenCalled();
   });
 });

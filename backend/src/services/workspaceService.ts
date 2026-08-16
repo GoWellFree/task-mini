@@ -38,7 +38,30 @@ export async function createWorkspaceWithOwner(
   return workspace;
 }
 
-/** Every user gets exactly one of these, created once at registration (see onboardingService). */
+const POSTGRES_UNIQUE_VIOLATION = "23505";
+
+function isUniqueViolation(err: unknown): boolean {
+  return typeof err === "object" && err !== null && "code" in err && (err as { code?: unknown }).code === POSTGRES_UNIQUE_VIOLATION;
+}
+
+/**
+ * Every user gets exactly one of these, created once at registration (see
+ * onboardingService). Two concurrent first-logins for the same brand-new
+ * user can both observe "no existing user" before either finishes creating
+ * one, so both can reach this call for the same ownerId — migration 014's
+ * partial unique index on (owner_id) where type='personal' makes the
+ * loser's insert fail atomically instead of silently creating a duplicate;
+ * that failure is caught here and treated as success, handing back the
+ * workspace the winner actually created.
+ */
 export async function createPersonalWorkspace(ownerId: string): Promise<Workspace> {
-  return createWorkspaceWithOwner("Личное пространство", ownerId, "personal");
+  try {
+    return await createWorkspaceWithOwner("Личное пространство", ownerId, "personal");
+  } catch (err) {
+    if (isUniqueViolation(err)) {
+      const existing = await workspaceRepository.findPersonalWorkspaceByOwner(ownerId);
+      if (existing) return existing;
+    }
+    throw err;
+  }
 }
