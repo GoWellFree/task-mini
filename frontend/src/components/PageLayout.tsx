@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { PageHeader } from "./ui/PageHeader";
-import { useTelegramBackButton } from "../lib/telegram";
+import { bindTelegramBackButton } from "../lib/telegram";
 
 interface PageLayoutProps {
   title: ReactNode;
@@ -19,7 +19,7 @@ export function PageLayout({ title, subtitle, onBack, headerAction, children }: 
 
   useEffect(() => {
     if (!goBack) return;
-    return useTelegramBackButton(goBack);
+    return bindTelegramBackButton(goBack);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onBack]);
 

@@ -23,11 +23,3 @@ export function ErrorMessage({ message, onRetry }: { message: string; onRetry?: 
   );
 }
 
-export function EmptyState({ title, hint }: { title: string; hint?: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center py-16 text-center text-content-tertiary">
-      <p className="text-base font-medium text-content-secondary">{title}</p>
-      {hint && <p className="mt-1 max-w-xs text-sm">{hint}</p>}
-    </div>
-  );
-}

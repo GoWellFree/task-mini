@@ -133,8 +133,11 @@ export function getTelegramColorScheme(): "light" | "dark" | undefined {
 /**
  * Shows Telegram's native back chevron and wires it to `onBack`. Returns a
  * cleanup function. A no-op outside Telegram so callers don't need to branch.
+ * Deliberately not named with a "use" prefix — it's a plain imperative
+ * helper (no internal hooks), and calling it from inside a useEffect (its
+ * only real use so far) trips react-hooks/rules-of-hooks otherwise.
  */
-export function useTelegramBackButton(onBack: (() => void) | undefined): () => void {
+export function bindTelegramBackButton(onBack: (() => void) | undefined): () => void {
   const webApp = getWebApp();
   if (!webApp || !onBack) return () => {};
 

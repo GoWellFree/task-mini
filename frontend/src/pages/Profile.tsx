@@ -1,17 +1,30 @@
 import { useEffect, useState } from "react";
+import { LogOut } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
-import { PageLayout } from "../components/PageLayout";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Card } from "../components/ui/Card";
+import { Avatar } from "../components/ui/Avatar";
+import { Switch } from "../components/ui/Switch";
+import { SegmentedControl } from "../components/ui/SegmentedControl";
+import { TimePicker } from "../components/ui/TimePicker";
+import { Input } from "../components/ui/Input";
+import { useToast } from "../components/ui/Toast";
+import { getThemePreference, setThemePreference, type ThemePreference } from "../lib/theme";
 import type { UserSettings } from "../types";
+
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "telegram", label: "Как в Telegram" },
+  { value: "light", label: "Светлая" },
+  { value: "dark", label: "Тёмная" },
+];
 
 export function Profile() {
   const { user, logout, logoutEverywhere } = useAuth();
+  const { showToast } = useToast();
   const [settings, setSettings] = useState<UserSettings | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
   const [timezone, setTimezone] = useState("");
-  const [timezoneSaved, setTimezoneSaved] = useState(false);
-  const [timezoneError, setTimezoneError] = useState<string | null>(null);
+  const [theme, setTheme] = useState<ThemePreference>(getThemePreference());
 
   useEffect(() => {
     api
@@ -25,30 +38,20 @@ export function Profile() {
   }, [user]);
 
   async function saveSettings(patch: Record<string, unknown>) {
-    setSaving(true);
-    setSaved(false);
     try {
       const res = await api.patch<{ settings: UserSettings }>("/api/v1/users/me/settings", patch);
       setSettings(res.settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      // Non-critical setting — surfacing a full-page error would be
-      // disproportionate; the value just silently doesn't update.
-      console.error(err instanceof ApiError ? err.message : err);
-    } finally {
-      setSaving(false);
+      showToast(err instanceof ApiError ? err.message : "Не удалось сохранить настройку", { tone: "error" });
     }
   }
 
   async function saveTimezone(tz: string) {
-    setTimezoneError(null);
     try {
       await api.patch("/api/v1/users/me", { timezone: tz });
-      setTimezoneSaved(true);
-      setTimeout(() => setTimezoneSaved(false), 2000);
+      showToast("Часовой пояс сохранён", { tone: "success" });
     } catch (err) {
-      setTimezoneError(err instanceof ApiError ? err.message : "Не удалось сохранить часовой пояс");
+      showToast(err instanceof ApiError ? err.message : "Не удалось сохранить часовой пояс", { tone: "error" });
     }
   }
 
@@ -58,156 +61,147 @@ export function Profile() {
     void saveTimezone(detected);
   }
 
+  function changeTheme(next: ThemePreference) {
+    setTheme(next);
+    setThemePreference(next);
+  }
+
   if (!user) return null;
 
   return (
-    <PageLayout title="Профиль">
-      <div className="flex flex-col items-center py-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-tg-button text-2xl font-semibold text-tg-buttonText">
-          {user.first_name.charAt(0)}
-        </div>
-        <p className="mt-3 text-lg font-semibold">
+    <div className="mx-auto min-h-full w-full max-w-content px-4 pb-28 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <PageHeader title="Профиль" />
+
+      <div className="flex flex-col items-center py-2">
+        <Avatar firstName={user.first_name} lastName={user.last_name} size={48} className="text-xl" />
+        <p className="mt-3 text-lg font-semibold text-content-primary">
           {user.first_name} {user.last_name ?? ""}
         </p>
+        {user.username && <p className="text-sm text-content-tertiary">@{user.username}</p>}
       </div>
 
-      <div className="mt-4 flex flex-col gap-2 rounded-xl bg-tg-secondaryBg p-4 text-sm">
-        <Row label="Telegram username" value={user.username ? `@${user.username}` : "—"} />
+      <Section title="Аккаунт">
         <Row label="Telegram ID" value={String(user.telegram_id)} />
-      </div>
+      </Section>
+
+      <Section title="Тема">
+        <SegmentedControl options={THEME_OPTIONS} value={theme} onChange={changeTheme} />
+      </Section>
+
+      <Section title="Часовой пояс">
+        <div className="flex gap-2">
+          <Input
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            onBlur={() => timezone && timezone !== user.timezone && void saveTimezone(timezone)}
+            placeholder="Europe/Moscow"
+            className="flex-1"
+          />
+          <button onClick={detectTimezone} className="shrink-0 rounded-lg bg-accent px-3 text-sm font-medium text-white">
+            Определить
+          </button>
+        </div>
+      </Section>
 
       {settings && (
-        <>
-          <div className="mt-4 rounded-xl bg-tg-secondaryBg p-4">
-            <label className="block">
-              <span className="mb-1.5 flex items-center justify-between text-sm font-medium text-tg-hint">
-                <span>Напоминать о сроке за (минут)</span>
-                {saved && <span className="text-xs text-green-600">Сохранено ✓</span>}
-              </span>
-              <input
-                type="number"
-                min={0}
-                max={60 * 24 * 7}
-                value={settings.default_reminder_minutes}
-                onChange={(e) => setSettings({ ...settings, default_reminder_minutes: Number(e.target.value) })}
-                onBlur={() => saveSettings({ defaultReminderMinutes: settings.default_reminder_minutes })}
-                disabled={saving}
-                className="w-full rounded-xl bg-tg-bg px-3.5 py-2.5 text-sm disabled:opacity-50"
-              />
-            </label>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-3 rounded-xl bg-tg-secondaryBg p-4">
-            <h3 className="text-sm font-medium text-tg-hint">Сводки и часовой пояс</h3>
-
-            <div className="flex flex-col gap-2 rounded-lg bg-tg-bg px-3.5 py-2.5">
-              <label className="text-xs text-tg-hint">Часовой пояс</label>
-              <div className="flex gap-2">
-                <input
-                  value={timezone}
-                  onChange={(e) => setTimezone(e.target.value)}
-                  onBlur={() => timezone && timezone !== user.timezone && void saveTimezone(timezone)}
-                  placeholder="Europe/Moscow"
-                  className="flex-1 rounded-lg border border-tg-hint/30 bg-tg-secondaryBg px-2.5 py-1.5 text-sm"
-                />
-                <button
-                  onClick={detectTimezone}
-                  className="shrink-0 rounded-lg bg-tg-button px-2.5 py-1.5 text-xs font-medium text-tg-buttonText"
-                >
-                  Определить
-                </button>
-              </div>
-              {timezoneSaved && <span className="text-xs text-green-600">Сохранено ✓</span>}
-              {timezoneError && <span className="text-xs text-red-600">{timezoneError}</span>}
-            </div>
-
-            <ToggleRow
-              label="Утренняя сводка"
-              checked={settings.daily_digest_enabled}
-              onChange={(v) => saveSettings({ dailyDigestEnabled: v })}
+        <Section title="Настройки задач">
+          <label className="flex items-center justify-between gap-3 py-1">
+            <span className="text-sm text-content-primary">Напоминать о сроке за (мин)</span>
+            <input
+              type="number"
+              min={0}
+              max={60 * 24 * 7}
+              value={settings.default_reminder_minutes}
+              onChange={(e) => setSettings({ ...settings, default_reminder_minutes: Number(e.target.value) })}
+              onBlur={() => saveSettings({ defaultReminderMinutes: settings.default_reminder_minutes })}
+              className="h-9 w-20 rounded-lg border border-border-subtle bg-surface-primary px-2 text-right text-sm"
             />
-            {settings.daily_digest_enabled && (
-              <label className="flex items-center justify-between gap-2 rounded-lg bg-tg-bg px-3.5 py-2.5 text-sm">
-                <span className="text-tg-hint">Время</span>
-                <input
-                  type="time"
-                  value={settings.daily_digest_time.slice(0, 5)}
-                  onChange={(e) => setSettings({ ...settings, daily_digest_time: e.target.value })}
-                  onBlur={() => saveSettings({ dailyDigestTime: settings.daily_digest_time })}
-                  className="rounded-lg border border-tg-hint/30 bg-tg-secondaryBg px-2.5 py-1.5 text-sm"
-                />
-              </label>
-            )}
-
-            <ToggleRow
-              label="Вечерняя сводка (18:00)"
-              checked={settings.evening_digest_enabled}
-              onChange={(v) => saveSettings({ eveningDigestEnabled: v })}
-            />
-
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-tg-bg px-3.5 py-2.5 text-sm">
-              <span className="text-tg-hint">Не беспокоить с</span>
-              <input
-                type="time"
-                value={settings.quiet_hours_start?.slice(0, 5) ?? ""}
-                onChange={(e) => setSettings({ ...settings, quiet_hours_start: e.target.value || null })}
-                onBlur={() => saveSettings({ quietHoursStart: settings.quiet_hours_start })}
-                className="rounded-lg border border-tg-hint/30 bg-tg-secondaryBg px-2.5 py-1.5 text-sm"
-              />
-            </div>
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-tg-bg px-3.5 py-2.5 text-sm">
-              <span className="text-tg-hint">до</span>
-              <input
-                type="time"
-                value={settings.quiet_hours_end?.slice(0, 5) ?? ""}
-                onChange={(e) => setSettings({ ...settings, quiet_hours_end: e.target.value || null })}
-                onBlur={() => saveSettings({ quietHoursEnd: settings.quiet_hours_end })}
-                className="rounded-lg border border-tg-hint/30 bg-tg-secondaryBg px-2.5 py-1.5 text-sm"
-              />
-            </div>
-          </div>
-        </>
+          </label>
+        </Section>
       )}
 
-      <button
-        onClick={logout}
-        className="mt-6 w-full rounded-xl bg-tg-secondaryBg py-3 text-sm font-medium text-red-600"
-      >
-        Выйти
-      </button>
+      {settings && (
+        <Section title="Уведомления и сводки">
+          <ToggleRow label="Утренняя сводка" checked={settings.daily_digest_enabled} onChange={(v) => saveSettings({ dailyDigestEnabled: v })} />
+          {settings.daily_digest_enabled && (
+            <div className="flex items-center justify-between py-1">
+              <span className="text-sm text-content-secondary">Время</span>
+              <div className="w-32">
+                <TimePicker
+                  value={settings.daily_digest_time.slice(0, 5)}
+                  onChange={(v) => {
+                    setSettings({ ...settings, daily_digest_time: v });
+                    saveSettings({ dailyDigestTime: v });
+                  }}
+                />
+              </div>
+            </div>
+          )}
 
-      <button
-        onClick={logoutEverywhere}
-        className="mt-2 w-full rounded-xl bg-tg-secondaryBg py-3 text-sm font-medium text-red-600"
-      >
-        Выйти на всех устройствах
-      </button>
-    </PageLayout>
+          <ToggleRow label="Вечерняя сводка (18:00)" checked={settings.evening_digest_enabled} onChange={(v) => saveSettings({ eveningDigestEnabled: v })} />
+
+          <div className="flex items-center justify-between py-1">
+            <span className="text-sm text-content-secondary">Не беспокоить с</span>
+            <div className="w-32">
+              <TimePicker
+                value={settings.quiet_hours_start?.slice(0, 5) ?? ""}
+                onChange={(v) => {
+                  setSettings({ ...settings, quiet_hours_start: v || null });
+                  saveSettings({ quietHoursStart: v || null });
+                }}
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between py-1">
+            <span className="text-sm text-content-secondary">до</span>
+            <div className="w-32">
+              <TimePicker
+                value={settings.quiet_hours_end?.slice(0, 5) ?? ""}
+                onChange={(v) => {
+                  setSettings({ ...settings, quiet_hours_end: v || null });
+                  saveSettings({ quietHoursEnd: v || null });
+                }}
+              />
+            </div>
+          </div>
+        </Section>
+      )}
+
+      <div className="mt-6 flex flex-col gap-2">
+        <button onClick={logout} className="flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-surface-secondary text-sm font-medium text-danger">
+          <LogOut size={16} /> Выйти
+        </button>
+        <button onClick={logoutEverywhere} className="h-11 w-full rounded-lg text-sm font-medium text-danger">
+          Выйти на всех устройствах
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="mt-4">
+      <h3 className="mb-2 text-[13px] font-semibold uppercase tracking-wide text-content-secondary">{title}</h3>
+      <Card className="flex flex-col gap-2.5 divide-y divide-border-subtle p-4">{children}</Card>
+    </div>
   );
 }
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-tg-hint">{label}</span>
-      <span className="font-medium">{value}</span>
+    <div className="flex justify-between py-1 text-sm">
+      <span className="text-content-secondary">{label}</span>
+      <span className="font-medium text-content-primary">{value}</span>
     </div>
   );
 }
 
-function ToggleRow({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange: (value: boolean) => void;
-}) {
+function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
   return (
-    <label className="flex items-center justify-between gap-2 rounded-lg bg-tg-bg px-3.5 py-2.5 text-sm">
-      <span>{label}</span>
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-4 w-4" />
-    </label>
+    <div className="flex items-center justify-between py-1">
+      <span className="text-sm text-content-primary">{label}</span>
+      <Switch checked={checked} onChange={onChange} aria-label={label} />
+    </div>
   );
 }

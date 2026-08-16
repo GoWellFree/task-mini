@@ -71,7 +71,7 @@ export function MyTasks() {
   const filtered = useMemo(() => {
     if (!tasks) return null;
     const now = new Date();
-    let result = tasks;
+    let result: TaskWithWorkspace[];
 
     switch (filter) {
       case "today":
