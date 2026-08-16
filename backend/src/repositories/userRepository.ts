@@ -41,3 +41,15 @@ export async function upsertUserByTelegramId(input: {
   if (error || !data) throw error ?? new Error("Upsert returned no row");
   return data as User;
 }
+
+export async function updateUser(id: string, patch: Partial<Pick<User, "timezone">>): Promise<User> {
+  const { data, error } = await supabase
+    .from("users")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("id", id)
+    .select("*")
+    .single();
+
+  if (error || !data) throw error ?? new Error("Update returned no row");
+  return data as User;
+}

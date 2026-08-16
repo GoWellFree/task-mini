@@ -16,6 +16,7 @@ export type {
   TaskStatus,
   TaskWithWorkspace,
   User,
+  UserSettings,
   Workspace,
   WorkspaceMember,
   WorkspaceMemberWithUser,

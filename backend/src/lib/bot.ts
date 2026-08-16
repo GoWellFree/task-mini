@@ -98,6 +98,38 @@ export async function notifyTaskReminder(params: { telegramId: number; task: Tas
   });
 }
 
+const DIGEST_LIST_LIMIT = 10;
+
+function formatDigestSection(title: string, tasks: Task[]): string[] {
+  if (tasks.length === 0) return [];
+  const lines = ["", `${title} (${tasks.length}):`];
+  for (const t of tasks.slice(0, DIGEST_LIST_LIMIT)) lines.push(`• ${t.title}`);
+  if (tasks.length > DIGEST_LIST_LIMIT) lines.push(`…и ещё ${tasks.length - DIGEST_LIST_LIMIT}`);
+  return lines;
+}
+
+export async function notifyDigest(params: {
+  telegramId: number;
+  kind: "daily" | "evening";
+  overdue: Task[];
+  dueToday: Task[];
+}): Promise<void> {
+  const { telegramId, kind, overdue, dueToday } = params;
+  const title = kind === "daily" ? "Утренняя сводка" : "Вечерняя сводка";
+
+  const text = [
+    title,
+    ...formatDigestSection("Просрочено", overdue),
+    ...formatDigestSection("Сегодня", dueToday),
+  ].join("\n");
+
+  await bot.sendMessage(telegramId, text, {
+    reply_markup: {
+      inline_keyboard: [[{ text: "Открыть Task Mini", url: miniAppUrl() }]],
+    },
+  });
+}
+
 export function registerBotCommands(): void {
   bot.onText(/^\/start/, (msg) => {
     bot.sendMessage(msg.chat.id, "Добро пожаловать в Task Mini! Управляйте личными и командными задачами прямо в Telegram.", {

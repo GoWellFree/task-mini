@@ -132,6 +132,14 @@ export interface TaskReminder {
   sent_at: string;
 }
 
+/** Records that a daily/evening digest was already sent for this recipient's own local calendar date. */
+export interface UserDigestLog {
+  user_id: string;
+  digest_type: "daily" | "evening";
+  sent_on: string;
+  sent_at: string;
+}
+
 /** `task_id` depends on (is blocked by) `depends_on_task_id` — the latter should be done first. */
 export interface TaskDependency {
   task_id: string;

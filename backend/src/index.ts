@@ -6,7 +6,7 @@ import type { Update } from "node-telegram-bot-api";
 import { ERROR_CODES, ERROR_MESSAGES, type ApiErrorBody } from "@task-mini/shared";
 import { env } from "./lib/env.js";
 import { bot, isValidWebhookSecret, registerBotCommands, shouldProcessUpdate } from "./lib/bot.js";
-import { startReminderWorker } from "./worker/reminderWorker.js";
+import { startNotificationWorker } from "./worker/notificationWorker.js";
 import { errorHandler, notFoundHandler, requestId } from "./middleware/errorHandler.js";
 import { authRouter } from "./routes/auth.js";
 import { usersRouter } from "./routes/users.js";
@@ -135,4 +135,4 @@ app.listen(env.port, () => {
   console.log(`Task Mini backend listening on port ${env.port} (${env.nodeEnv})`);
 });
 
-startReminderWorker();
+startNotificationWorker();
