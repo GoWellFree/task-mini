@@ -1,24 +1,57 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { FolderPlus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { PageLayout } from "../components/PageLayout";
-import { Loading, ErrorMessage, EmptyState } from "../components/Feedback";
-import type { Workspace } from "../types";
+import { PageHeader } from "../components/ui/PageHeader";
+import { Card } from "../components/ui/Card";
+import { CardSkeleton } from "../components/ui/Skeleton";
+import { EmptyState } from "../components/ui/EmptyState";
+import { AvatarGroup } from "../components/ui/Avatar";
+import { Button } from "../components/ui/Button";
+import { BottomSheet } from "../components/ui/BottomSheet";
+import { Input } from "../components/ui/Input";
+import { ErrorMessage } from "../components/Feedback";
+import type { Task, Workspace, WorkspaceMemberWithUser } from "../types";
+
+interface WorkspaceSummary {
+  workspace: Workspace;
+  total: number;
+  done: number;
+  members: WorkspaceMemberWithUser[];
+}
 
 export function Workspaces() {
-  const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+  const [summaries, setSummaries] = useState<WorkspaceSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState("");
   const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
   async function load() {
     setError(null);
     try {
       const res = await api.get<{ workspaces: Workspace[] }>("/api/workspaces");
-      setWorkspaces(res.workspaces);
+      // N+1 by design for now: /api/workspaces has no summary counts of its
+      // own. Fine at this scale (a handful of workspaces per user); worth a
+      // dedicated /api/workspaces/:id/summary endpoint if that changes.
+      const withSummary = await Promise.all(
+        res.workspaces.map(async (workspace) => {
+          const [tasksRes, membersRes] = await Promise.all([
+            api.get<{ tasks: Task[] }>(`/api/workspaces/${workspace.id}/tasks`),
+            api.get<{ members: WorkspaceMemberWithUser[] }>(`/api/workspaces/${workspace.id}/members`),
+          ]);
+          return {
+            workspace,
+            total: tasksRes.tasks.length,
+            done: tasksRes.tasks.filter((t) => t.status === "done").length,
+            members: membersRes.members,
+          };
+        }),
+      );
+      setSummaries(withSummary);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить группы");
+      setError(err instanceof ApiError ? err.message : "Не удалось загрузить группы");
     }
   }
 
@@ -26,59 +59,103 @@ export function Workspaces() {
     load();
   }, []);
 
-  async function handleCreate(e: FormEvent) {
-    e.preventDefault();
+  async function handleCreate() {
     if (!name.trim()) return;
-    setCreating(true);
+    setSubmitting(true);
     setFormError(null);
     try {
-      const res = await api.post<{ workspace: Workspace }>("/api/workspaces", { name });
-      setWorkspaces((prev) => [res.workspace, ...(prev ?? [])]);
+      await api.post<{ workspace: Workspace }>("/api/workspaces", { name: name.trim() });
       setName("");
+      setCreating(false);
+      await load();
     } catch (err) {
       setFormError(err instanceof ApiError ? err.message : "Не удалось создать группу");
     } finally {
-      setCreating(false);
+      setSubmitting(false);
     }
   }
 
   return (
-    <PageLayout title="Рабочие группы">
-      <form onSubmit={handleCreate} className="mb-5 flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Название новой группы"
-          className="flex-1 rounded-xl bg-tg-secondaryBg px-3.5 py-2.5 text-sm outline-none"
-        />
-        <button
-          type="submit"
-          disabled={creating || !name.trim()}
-          className="shrink-0 rounded-xl bg-tg-button px-4 py-2.5 text-sm font-medium text-tg-buttonText disabled:opacity-50"
-        >
-          Создать
-        </button>
-      </form>
-      {formError && <p className="mb-3 text-sm text-red-600">{formError}</p>}
+    <div className="mx-auto min-h-full w-full max-w-content px-4 pb-28 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <PageHeader title="Проекты" action={<Button size="sm" onClick={() => setCreating(true)}>+ Проект</Button>} />
 
       {error && <ErrorMessage message={error} onRetry={load} />}
-      {!error && !workspaces && <Loading />}
-      {!error && workspaces && workspaces.length === 0 && (
-        <EmptyState title="У вас пока нет групп" hint="Создайте первую группу выше" />
+
+      {!error && !summaries && (
+        <div className="flex flex-col gap-3">
+          <CardSkeleton />
+          <CardSkeleton />
+        </div>
       )}
-      {workspaces && workspaces.length > 0 && (
-        <div className="flex flex-col gap-2">
-          {workspaces.map((w) => (
-            <Link
-              key={w.id}
-              to={`/workspaces/${w.id}`}
-              className="rounded-xl bg-tg-secondaryBg p-3.5 font-medium active:opacity-70"
-            >
-              {w.name}
-            </Link>
+
+      {!error && summaries && summaries.length === 0 && (
+        <EmptyState
+          icon={<FolderPlus size={28} />}
+          title="Пока нет проектов"
+          hint="Создайте первый проект и объедините связанные задачи в одном месте."
+          actionLabel="Создать проект"
+          onAction={() => setCreating(true)}
+        />
+      )}
+
+      {summaries && summaries.length > 0 && (
+        <div className="flex flex-col gap-3">
+          {summaries.map((s) => (
+            <ProjectCard key={s.workspace.id} summary={s} />
           ))}
         </div>
       )}
-    </PageLayout>
+
+      <BottomSheet open={creating} onClose={() => setCreating(false)} title="Новый проект">
+        <div className="flex flex-col gap-3">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Название проекта"
+            autoFocus
+            onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          />
+          {formError && <p className="text-sm text-danger">{formError}</p>}
+          <Button variant="primary" size="lg" fullWidth disabled={!name.trim() || submitting} onClick={handleCreate}>
+            {submitting ? "Создание..." : "Создать"}
+          </Button>
+        </div>
+      </BottomSheet>
+    </div>
+  );
+}
+
+function ProjectCard({ summary }: { summary: WorkspaceSummary }) {
+  const { workspace, total, done, members } = summary;
+  const progress = total > 0 ? Math.round((done / total) * 100) : 0;
+
+  return (
+    <Link to={`/workspaces/${workspace.id}`}>
+      <Card className="p-4 active:opacity-80">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+          <h3 className="truncate text-[15px] font-semibold text-content-primary">{workspace.name}</h3>
+        </div>
+
+        {total > 0 ? (
+          <>
+            <p className="mt-2 text-sm text-content-secondary">
+              {total} {total === 1 ? "задача" : "задач"} · {done} выполнено
+            </p>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-surface-secondary">
+              <div className="h-full rounded-pill bg-accent transition-[width] duration-300" style={{ width: `${progress}%` }} />
+            </div>
+          </>
+        ) : (
+          <p className="mt-2 text-sm text-content-tertiary">Нет задач</p>
+        )}
+
+        {members.length > 0 && (
+          <div className="mt-3">
+            <AvatarGroup people={members.map((m) => ({ firstName: m.user.first_name, lastName: m.user.last_name }))} size={24} />
+          </div>
+        )}
+      </Card>
+    </Link>
   );
 }

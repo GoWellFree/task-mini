@@ -8,7 +8,6 @@ import { Home } from "./pages/Home";
 import { MyTasks } from "./pages/MyTasks";
 import { Workspaces } from "./pages/Workspaces";
 import { WorkspaceDetail } from "./pages/WorkspaceDetail";
-import { CreateTask } from "./pages/CreateTask";
 import { TaskDetail } from "./pages/TaskDetail";
 import { Profile } from "./pages/Profile";
 import type { Workspace } from "./types";
@@ -29,7 +28,6 @@ export function App() {
         <Route path="/my-tasks" element={<MyTasks />} />
         <Route path="/workspaces" element={<Workspaces />} />
         <Route path="/workspaces/:id" element={<WorkspaceDetail />} />
-        <Route path="/tasks/new" element={<CreateTask />} />
         <Route path="/tasks/:id" element={<TaskDetail />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />
