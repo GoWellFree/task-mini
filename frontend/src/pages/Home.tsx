@@ -1,29 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../lib/api";
+import { ChevronRight, PartyPopper } from "lucide-react";
+import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
-import { PageLayout } from "../components/PageLayout";
-import { Loading, ErrorMessage, EmptyState } from "../components/Feedback";
-import { TaskListItem } from "../components/TaskBits";
-import type { Task, Workspace } from "../types";
+import { useQuickAdd } from "../lib/QuickAddContext";
+import { useToast } from "../components/ui/Toast";
+import { PageHeader } from "../components/ui/PageHeader";
+import { EmptyState } from "../components/ui/EmptyState";
+import { TaskItemSkeleton } from "../components/ui/Skeleton";
+import { SectionHeader } from "../components/ui/SectionHeader";
+import { ErrorMessage } from "../components/Feedback";
+import { FocusCard } from "../components/tasks/FocusCard";
+import { TaskItem } from "../components/tasks/TaskItem";
+import { haptics } from "../lib/haptics";
+import type { Task, TaskWithWorkspace } from "../types";
+
+const LATER_LIMIT = 5;
+
+function startOfDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(0, 0, 0, 0);
+  return copy;
+}
+function endOfDay(d: Date): Date {
+  const copy = new Date(d);
+  copy.setHours(23, 59, 59, 999);
+  return copy;
+}
+function isToday(iso: string): boolean {
+  const d = new Date(iso);
+  return d >= startOfDay(new Date()) && d <= endOfDay(new Date());
+}
 
 export function Home() {
   const { user } = useAuth();
-  const [tasks, setTasks] = useState<Task[] | null>(null);
-  const [workspaces, setWorkspaces] = useState<Workspace[] | null>(null);
+  const { openQuickAdd } = useQuickAdd();
+  const { showToast } = useToast();
+  const [tasks, setTasks] = useState<TaskWithWorkspace[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
 
   async function load() {
     setError(null);
     try {
-      const [tasksRes, workspacesRes] = await Promise.all([
-        api.get<{ tasks: Task[] }>("/api/tasks/my"),
-        api.get<{ workspaces: Workspace[] }>("/api/workspaces"),
-      ]);
-      setTasks(tasksRes.tasks);
-      setWorkspaces(workspacesRes.workspaces);
+      const res = await api.get<{ tasks: TaskWithWorkspace[] }>("/api/tasks/my");
+      setTasks(res.tasks);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Не удалось загрузить данные");
+      setError(err instanceof ApiError ? err.message : "Не удалось загрузить задачи");
     }
   }
 
@@ -31,75 +54,166 @@ export function Home() {
     load();
   }, []);
 
-  if (error) return <PageLayout title="Task Mini"><ErrorMessage message={error} onRetry={load} /></PageLayout>;
-  if (!tasks || !workspaces) return <PageLayout title="Task Mini"><Loading /></PageLayout>;
+  async function toggleTask(task: TaskWithWorkspace) {
+    if (!tasks) return;
+    const nextStatus = task.status === "done" ? "todo" : "done";
+    // Optimistic: flip immediately, roll back only on failure.
+    setTasks((prev) => prev!.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)));
+    try {
+      const res = await api.patch<{ task: Task }>(`/api/tasks/${task.id}`, { version: task.version, status: nextStatus });
+      setTasks((prev) => prev!.map((t) => (t.id === task.id ? { ...t, ...res.task } : t)));
+    } catch (err) {
+      setTasks((prev) => prev!.map((t) => (t.id === task.id ? task : t)));
+      haptics.error();
+      showToast(err instanceof ApiError ? err.message : "Не удалось обновить задачу", { tone: "error" });
+    }
+  }
 
-  const today = new Date();
-  today.setHours(23, 59, 59, 999);
-  const startOfToday = new Date();
-  startOfToday.setHours(0, 0, 0, 0);
+  const grouped = useMemo(() => {
+    if (!tasks) return null;
+    const active = tasks.filter((t) => t.status !== "done");
+    const completedToday = tasks.filter(
+      (t) => t.status === "done" && t.completed_at && isToday(t.completed_at),
+    );
 
-  const todayTasks = tasks.filter(
-    (t) => t.due_at && new Date(t.due_at) >= startOfToday && new Date(t.due_at) <= today && t.status !== "done",
-  );
-  const overdueTasks = tasks.filter((t) => t.due_at && new Date(t.due_at) < startOfToday && t.status !== "done");
+    const overdue = active
+      .filter((t) => t.due_at && new Date(t.due_at) < startOfDay(new Date()))
+      .sort((a, b) => new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime());
+
+    const today = active
+      .filter((t) => t.due_at && isToday(t.due_at))
+      .sort((a, b) => {
+        const critical = (t: TaskWithWorkspace) => (t.priority === "urgent" ? 0 : 1);
+        if (critical(a) !== critical(b)) return critical(a) - critical(b);
+        return new Date(a.due_at!).getTime() - new Date(b.due_at!).getTime();
+      });
+
+    const later = active
+      .filter((t) => !t.due_at || new Date(t.due_at) > endOfDay(new Date()))
+      .sort((a, b) => {
+        if (!a.due_at) return 1;
+        if (!b.due_at) return -1;
+        return new Date(a.due_at).getTime() - new Date(b.due_at).getTime();
+      });
+
+    const important = [...overdue, ...today].filter((t) => t.priority === "high" || t.priority === "urgent").length;
+    const totalActive = overdue.length + today.length;
+    const progress = totalActive + completedToday.length > 0 ? Math.round((completedToday.length / (totalActive + completedToday.length)) * 100) : 0;
+
+    return { overdue, today, later, completedToday, important, totalActive, progress };
+  }, [tasks]);
+
+  if (error) {
+    return (
+      <div className="mx-auto min-h-full w-full max-w-content px-4 pb-28 pt-[calc(env(safe-area-inset-top)+16px)]">
+        <PageHeader title="Сегодня" />
+        <ErrorMessage message={error} onRetry={load} />
+      </div>
+    );
+  }
+
+  const greeting = `Привет, ${user?.first_name ?? ""}`;
+  const dateLabel = new Date().toLocaleDateString("ru-RU", { day: "numeric", month: "long" });
 
   return (
-    <PageLayout title={`Привет, ${user?.first_name ?? ""}!`}>
-      <Link
-        to="/tasks/new"
-        className="mb-5 block w-full rounded-xl bg-tg-button py-3 text-center text-sm font-medium text-tg-buttonText"
-      >
-        + Новая задача
-      </Link>
+    <div className="mx-auto min-h-full w-full max-w-content px-4 pb-28 pt-[calc(env(safe-area-inset-top)+16px)]">
+      <PageHeader title={greeting} subtitle={dateLabel} />
 
-      {overdueTasks.length > 0 && (
-        <section className="mb-5">
-          <h2 className="mb-2 text-sm font-medium text-red-600">Просроченные</h2>
-          <div className="flex flex-col gap-2">
-            {overdueTasks.map((t) => (
-              <TaskListItem key={t.id} task={t} />
-            ))}
-          </div>
-        </section>
-      )}
+      {!grouped ? (
+        <>
+          <div className="mb-4 h-[92px] animate-nova-skeleton rounded-lg bg-surface-secondary" />
+          <TaskItemSkeleton />
+          <TaskItemSkeleton />
+          <TaskItemSkeleton />
+        </>
+      ) : (
+        <>
+          {grouped.totalActive + grouped.completedToday.length > 0 && (
+            <FocusCard
+              total={grouped.totalActive}
+              important={grouped.important}
+              overdue={grouped.overdue.length}
+              progressPercent={grouped.progress}
+            />
+          )}
 
-      <section className="mb-5">
-        <h2 className="mb-2 text-sm font-medium text-tg-hint">Задачи на сегодня</h2>
-        {todayTasks.length === 0 ? (
-          <EmptyState title="На сегодня задач нет" />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {todayTasks.map((t) => (
-              <TaskListItem key={t.id} task={t} />
-            ))}
-          </div>
-        )}
-      </section>
+          <button
+            onClick={() => openQuickAdd({ onCreated: load })}
+            className="mb-5 flex h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-border-subtle text-sm font-medium text-content-secondary active:bg-surface-secondary"
+          >
+            + Добавить задачу
+          </button>
 
-      <section>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-tg-hint">Рабочие группы</h2>
-          <Link to="/workspaces" className="text-sm text-tg-link">
-            Все
-          </Link>
-        </div>
-        {workspaces.length === 0 ? (
-          <EmptyState title="Пока нет групп" hint="Создайте группу, чтобы начать" />
-        ) : (
-          <div className="flex flex-col gap-2">
-            {workspaces.slice(0, 3).map((w) => (
-              <Link
-                key={w.id}
-                to={`/workspaces/${w.id}`}
-                className="rounded-xl bg-tg-secondaryBg p-3.5 font-medium active:opacity-70"
+          {grouped.overdue.length > 0 && (
+            <section className="mb-5">
+              <SectionHeader title="Просрочено" count={grouped.overdue.length} tone="danger" />
+              <div className="flex flex-col divide-y divide-border-subtle">
+                {grouped.overdue.map((t) => (
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          <section className="mb-5">
+            <SectionHeader title="Сегодня" count={grouped.today.length || undefined} />
+            {grouped.today.length === 0 && grouped.overdue.length === 0 ? (
+              <EmptyState
+                icon={<PartyPopper size={28} />}
+                title="Все выполнено 🎉"
+                hint="На сегодня задач больше нет. Можно спокойно переключиться на что-нибудь приятное."
+              />
+            ) : grouped.today.length === 0 ? (
+              <p className="py-3 text-sm text-content-tertiary">Ничего не запланировано на сегодня.</p>
+            ) : (
+              <div className="flex flex-col divide-y divide-border-subtle">
+                {grouped.today.map((t) => (
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                ))}
+              </div>
+            )}
+          </section>
+
+          {grouped.later.length > 0 && (
+            <section className="mb-5">
+              <SectionHeader
+                title="Позже"
+                action={
+                  <Link to="/my-tasks" className="text-xs font-medium text-accent">
+                    Все задачи
+                  </Link>
+                }
+              />
+              <div className="flex flex-col divide-y divide-border-subtle">
+                {grouped.later.slice(0, LATER_LIMIT).map((t) => (
+                  <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                ))}
+              </div>
+            </section>
+          )}
+
+          {grouped.completedToday.length > 0 && (
+            <section>
+              <button
+                onClick={() => setShowCompleted((s) => !s)}
+                className="flex w-full items-center justify-between py-2 text-[13px] font-semibold uppercase tracking-wide text-content-tertiary"
               >
-                {w.name}
-              </Link>
-            ))}
-          </div>
-        )}
-      </section>
-    </PageLayout>
+                <span>
+                  Выполнено сегодня <span className="text-content-tertiary">{grouped.completedToday.length}</span>
+                </span>
+                <ChevronRight size={16} className={`transition-transform duration-150 ${showCompleted ? "rotate-90" : ""}`} />
+              </button>
+              {showCompleted && (
+                <div className="flex flex-col divide-y divide-border-subtle">
+                  {grouped.completedToday.map((t) => (
+                    <TaskItem key={t.id} task={t} onToggle={toggleTask} />
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
+        </>
+      )}
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { Sun, CheckSquare, Folder, User } from "lucide-react";
 import { FloatingActionButton } from "./FloatingActionButton";
 import { haptics } from "../../lib/haptics";
+import { useQuickAdd } from "../../lib/QuickAddContext";
 
 const TOP_LEVEL_ROUTES = ["/", "/my-tasks", "/workspaces", "/profile"];
 
@@ -20,6 +21,7 @@ export function isTopLevelRoute(pathname: string): boolean {
 export function BottomNavigation() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { openQuickAdd } = useQuickAdd();
 
   if (!isTopLevelRoute(location.pathname)) return null;
 
@@ -30,7 +32,10 @@ export function BottomNavigation() {
           <NavItem key={item.to} {...item} />
         ))}
         <div className="flex items-center justify-center">
-          <FloatingActionButton onClick={() => navigate("/tasks/new")} className="-mt-6" />
+          <FloatingActionButton
+            onClick={() => openQuickAdd({ onCreated: (task) => navigate(`/tasks/${task.id}`) })}
+            className="-mt-6"
+          />
         </div>
         {items.slice(2).map((item) => (
           <NavItem key={item.to} {...item} />
