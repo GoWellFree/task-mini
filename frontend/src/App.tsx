@@ -3,7 +3,7 @@ import { Navigate, Route, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./lib/AuthContext";
 import { api } from "./lib/api";
 import { Loading, ErrorMessage } from "./components/Feedback";
-import { BottomNav } from "./components/BottomNav";
+import { BottomNavigation } from "./components/navigation/BottomNavigation";
 import { Home } from "./pages/Home";
 import { MyTasks } from "./pages/MyTasks";
 import { Workspaces } from "./pages/Workspaces";
@@ -34,7 +34,7 @@ export function App() {
         <Route path="/profile" element={<Profile />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-      <BottomNav />
+      <BottomNavigation />
     </>
   );
 }

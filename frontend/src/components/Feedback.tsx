@@ -1,7 +1,9 @@
+import { AlertCircle } from "lucide-react";
+
 export function Loading({ label = "Загрузка..." }: { label?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-tg-hint">
-      <div className="h-8 w-8 animate-spin rounded-full border-2 border-tg-hint border-t-transparent" />
+    <div className="flex flex-col items-center justify-center py-16 text-content-tertiary">
+      <div className="h-8 w-8 animate-spin rounded-full border-2 border-content-tertiary border-t-transparent" />
       <p className="mt-3 text-sm">{label}</p>
     </div>
   );
@@ -9,10 +11,11 @@ export function Loading({ label = "Загрузка..." }: { label?: string }) {
 
 export function ErrorMessage({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="mx-4 my-4 rounded-xl bg-red-50 p-4 text-red-700">
-      <p className="text-sm">{message}</p>
+    <div className="mx-4 my-4 flex flex-col items-center gap-2 rounded-lg bg-danger-soft p-5 text-center">
+      <AlertCircle size={22} className="text-danger" />
+      <p className="text-sm text-danger">{message}</p>
       {onRetry && (
-        <button onClick={onRetry} className="mt-2 text-sm font-medium underline">
+        <button onClick={onRetry} className="mt-1 text-sm font-semibold text-danger underline underline-offset-2">
           Повторить
         </button>
       )}
@@ -22,8 +25,8 @@ export function ErrorMessage({ message, onRetry }: { message: string; onRetry?: 
 
 export function EmptyState({ title, hint }: { title: string; hint?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 text-center text-tg-hint">
-      <p className="text-base font-medium">{title}</p>
+    <div className="flex flex-col items-center justify-center py-16 text-center text-content-tertiary">
+      <p className="text-base font-medium text-content-secondary">{title}</p>
       {hint && <p className="mt-1 max-w-xs text-sm">{hint}</p>}
     </div>
   );
