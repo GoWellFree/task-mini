@@ -10,6 +10,7 @@ import { ActionSheet, type ActionSheetItem } from "../ui/ActionSheet";
 import { PRIORITY_DISPLAY } from "../ui/PriorityBadge";
 import { api, ApiError } from "../../lib/api";
 import { haptics } from "../../lib/haptics";
+import { useAuth } from "../../lib/AuthContext";
 import { useToast } from "../ui/Toast";
 import type { RecurrenceRule, Task, TaskPriority, Workspace, WorkspaceMemberWithUser } from "../../types";
 
@@ -35,6 +36,7 @@ function todayDateOnly(): string {
 }
 
 export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: QuickAddSheetProps) {
+  const { user } = useAuth();
   const { showToast } = useToast();
   const titleRef = useRef<HTMLInputElement>(null);
 
@@ -51,7 +53,7 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
   const [assigneePickerOpen, setAssigneePickerOpen] = useState(false);
   const [recurrencePickerOpen, setRecurrencePickerOpen] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
-  const [assigneeId, setAssigneeId] = useState("");
+  const [assigneeId, setAssigneeId] = useState(user?.id ?? "");
   const [description, setDescription] = useState("");
   const [subtasks, setSubtasks] = useState<string[]>([]);
   const [subtaskDraft, setSubtaskDraft] = useState("");
@@ -67,7 +69,7 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
     setDueTime("");
     setPriority("none");
     setAdvancedOpen(false);
-    setAssigneeId("");
+    setAssigneeId(user?.id ?? "");
     setDescription("");
     setSubtasks([]);
     setSubtaskDraft("");
@@ -78,7 +80,7 @@ export function QuickAddSheet({ open, onClose, defaultWorkspaceId, onCreated }: 
       setWorkspaceId((current) => current || defaultWorkspaceId || res.workspaces[0]?.id || "");
     });
     setTimeout(() => titleRef.current?.focus(), 50);
-  }, [open, defaultWorkspaceId]);
+  }, [open, defaultWorkspaceId, user?.id]);
 
   useEffect(() => {
     if (!workspaceId) {
