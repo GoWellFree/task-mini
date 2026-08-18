@@ -20,6 +20,7 @@ import type {
   ChecklistItem,
   Label,
   Task,
+  TaskAttachment,
   TaskAttachmentWithUploader,
   TaskComment,
   TaskCommentWithAuthor,
@@ -286,7 +287,7 @@ export function TaskDetail() {
 
   // --- attachments ---
   async function uploadAttachment(file: File) {
-    if (!task) return;
+    if (!task || !user) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
       showToast("Файл слишком большой (максимум 15 МБ)", { tone: "error" });
       return;
@@ -295,8 +296,14 @@ export function TaskDetail() {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await api.upload<{ attachment: TaskAttachmentWithUploader }>(`/api/tasks/${task.id}/attachments`, formData);
-      setAttachments((prev) => [...prev, res.attachment]);
+      // POST returns a plain TaskAttachment (no uploader join) — the uploader
+      // is always the current user, so build the joined shape locally rather
+      // than refetching the whole list.
+      const res = await api.upload<{ attachment: TaskAttachment }>(`/api/tasks/${task.id}/attachments`, formData);
+      setAttachments((prev) => [
+        ...prev,
+        { ...res.attachment, uploader: { id: user.id, username: user.username, first_name: user.first_name, last_name: user.last_name, telegram_id: user.telegram_id } },
+      ]);
     } catch (err) {
       showToast(err instanceof ApiError ? err.message : "Не удалось загрузить файл", { tone: "error" });
     } finally {
