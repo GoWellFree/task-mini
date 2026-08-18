@@ -32,8 +32,13 @@ function nextWeekday(from: Date, targetDay: number): Date {
 interface DatePickerProps {
   open: boolean;
   onClose: () => void;
-  /** yyyy-mm-dd or null for "no due date" */
-  value: string | null;
+  /**
+   * yyyy-mm-dd, null for "explicitly no due date" (highlights the "Без
+   * срока" shortcut), or undefined for "nothing chosen yet" — e.g. a bulk
+   * action with no single current date to show, where highlighting "Без
+   * срока" would misleadingly look like an existing selection.
+   */
+  value: string | null | undefined;
   onChange: (value: string | null) => void;
 }
 
@@ -71,7 +76,7 @@ export function DatePicker({ open, onClose, value, onChange }: DatePickerProps) 
             key={s.label}
             onClick={() => pick(s.date)}
             className={`rounded-pill border px-3.5 py-2 text-sm font-medium transition-colors duration-150 ${
-              (value === null) === (s.date === null) && (s.date === null || value === toDateOnly(s.date))
+              value !== undefined && (value === null) === (s.date === null) && (s.date === null || value === toDateOnly(s.date))
                 ? "border-accent bg-accent-soft text-accent"
                 : "border-border-subtle text-content-secondary active:opacity-70"
             }`}

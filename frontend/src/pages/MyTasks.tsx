@@ -15,6 +15,7 @@ import { PRIORITY_DISPLAY } from "../components/ui/PriorityBadge";
 import { useToast } from "../components/ui/Toast";
 import { haptics } from "../lib/haptics";
 import { pluralTasks } from "../lib/pluralize";
+import { bindTelegramBackButton } from "../lib/telegram";
 import type { Task, TaskPriority, TaskWithWorkspace } from "../types";
 
 type SmartFilter = "all" | "today" | "upcoming" | "overdue" | "done";
@@ -118,6 +119,15 @@ export function MyTasks() {
     setSelectMode(false);
     setSelectedIds(new Set());
   }
+
+  // MyTasks is a top-level tab (no PageLayout/onBack), so it never wires up
+  // a Telegram BackButton on its own — without this, pressing the native
+  // back button/swipe while selecting does nothing, and the only way out is
+  // the in-app close (X) button.
+  useEffect(() => {
+    if (!selectMode) return;
+    return bindTelegramBackButton(exitSelectMode);
+  }, [selectMode]);
 
   function toggleSelected(task: TaskWithWorkspace) {
     setSelectedIds((prev) => {
@@ -243,7 +253,7 @@ export function MyTasks() {
       )}
 
       {selectMode && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-border-subtle bg-surface-primary pb-[env(safe-area-inset-bottom)] shadow-float">
+        <div className="animate-nova-slide-up fixed inset-x-0 bottom-0 z-30 border-t border-border-subtle bg-surface-primary pb-[env(safe-area-inset-bottom)] shadow-float">
           <div className="mx-auto flex max-w-content items-center gap-1 px-2 py-2">
             <button
               onClick={exitSelectMode}
@@ -252,7 +262,7 @@ export function MyTasks() {
             >
               <X size={20} />
             </button>
-            <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-content-secondary">{selectedIds.size} выбрано</span>
+            <span className="shrink-0 whitespace-nowrap px-1 text-sm font-medium text-content-secondary">{selectedIds.size} выбрано</span>
             <BulkBarButton icon={<Check size={18} />} label="Выполнить" disabled={selectedIds.size === 0 || bulkBusy} onClick={bulkComplete} />
             <BulkBarButton icon={<Calendar size={18} />} label="Срок" disabled={selectedIds.size === 0 || bulkBusy} onClick={() => setBulkRescheduleOpen(true)} />
             <BulkBarButton icon={<Flag size={18} />} label="Приоритет" disabled={selectedIds.size === 0 || bulkBusy} onClick={() => setBulkPriorityOpen(true)} />
@@ -268,7 +278,7 @@ export function MyTasks() {
         items={[{ label: "Удалить", tone: "danger", onSelect: bulkDelete }]}
       />
       <ActionSheet open={bulkPriorityOpen} onClose={() => setBulkPriorityOpen(false)} title="Приоритет" items={priorityItems} />
-      <DatePicker open={bulkRescheduleOpen} onClose={() => setBulkRescheduleOpen(false)} value={null} onChange={bulkReschedule} />
+      <DatePicker open={bulkRescheduleOpen} onClose={() => setBulkRescheduleOpen(false)} value={undefined} onChange={bulkReschedule} />
     </div>
   );
 }
@@ -291,12 +301,12 @@ function BulkBarButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors duration-150 active:bg-surface-secondary disabled:opacity-35 ${
+      className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg py-1.5 text-[11px] font-medium transition-colors duration-150 active:bg-surface-secondary disabled:opacity-35 ${
         tone === "danger" ? "text-danger" : "text-content-primary"
       }`}
     >
       {icon}
-      {label}
+      <span className="whitespace-nowrap">{label}</span>
     </button>
   );
 }

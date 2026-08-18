@@ -553,9 +553,7 @@ function ChecklistSection({
             <Checkbox checked={item.is_done} onChange={() => onToggle(item)} disabled={!canToggle} aria-label={item.title} />
             <span className={`flex-1 text-sm ${item.is_done ? "text-content-tertiary line-through" : "text-content-primary"}`}>{item.title}</span>
             {canManage && (
-              <button onClick={() => onDelete(item.id)} className="shrink-0 text-content-tertiary" aria-label="Удалить пункт">
-                <X size={14} />
-              </button>
+              <IconButton icon={<X size={14} />} size="sm" onClick={() => onDelete(item.id)} aria-label="Удалить пункт" />
             )}
           </div>
         ))}
@@ -611,13 +609,9 @@ function AttachmentsSection({
                 {formatFileSize(a.file_size)} · {a.uploader.first_name}
               </p>
             </div>
-            <button onClick={() => onDownload(a.id)} className="shrink-0 p-1.5 text-content-secondary" aria-label={`Скачать ${a.file_name}`}>
-              <Download size={16} />
-            </button>
+            <IconButton icon={<Download size={16} />} size="sm" onClick={() => onDownload(a.id)} aria-label={`Скачать ${a.file_name}`} />
             {(canManage || a.uploader_id === currentUserId) && (
-              <button onClick={() => onDelete(a.id)} className="shrink-0 p-1.5 text-content-tertiary" aria-label={`Удалить ${a.file_name}`}>
-                <X size={14} />
-              </button>
+              <IconButton icon={<X size={14} />} size="sm" onClick={() => onDelete(a.id)} aria-label={`Удалить ${a.file_name}`} />
             )}
           </div>
         ))}

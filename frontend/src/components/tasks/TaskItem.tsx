@@ -174,9 +174,9 @@ export function TaskItem({
           className={`flex h-11 w-11 shrink-0 items-center justify-center ${!onToggle && !selectMode ? "pointer-events-none" : ""}`}
         >
           <span
-            className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
+            className={`flex h-6 w-6 items-center justify-center border-2 transition-colors duration-150 ${selectMode ? "rounded-md" : "rounded-full"} ${
               selectMode ? (selected ? "border-accent bg-accent" : "border-border-subtle") : isDone ? "border-success bg-success" : "border-border-subtle"
-            } ${selectMode ? "rounded-md" : ""}`}
+            }`}
           >
             {(selectMode ? selected : isDone) && <Check size={14} strokeWidth={3} className="text-white" />}
           </span>
