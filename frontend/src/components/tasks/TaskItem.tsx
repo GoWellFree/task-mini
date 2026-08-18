@@ -32,12 +32,19 @@ export function TaskItem({
   onToggle,
   onChanged,
   showWorkspace = true,
+  selectMode = false,
+  selected = false,
+  onSelectToggle,
 }: {
   task: TaskWithWorkspace;
   onToggle?: (task: TaskWithWorkspace) => void;
   /** Called after a swipe/long-press action mutates the task directly (reschedule, priority, delete) so the parent list can refetch. */
   onChanged?: () => void;
   showWorkspace?: boolean;
+  /** Bulk-selection mode: swap the complete-checkbox for a selection checkbox and route taps to selection instead of navigation/gestures. */
+  selectMode?: boolean;
+  selected?: boolean;
+  onSelectToggle?: (task: TaskWithWorkspace) => void;
 }) {
   const { showToast } = useToast();
   const isDone = task.status === "done";
@@ -58,7 +65,7 @@ export function TaskItem({
   }
 
   function onPointerDown(e: React.PointerEvent) {
-    if (!onToggle) return;
+    if (!onToggle || selectMode) return;
     startX.current = e.clientX;
     suppressClick.current = false;
     longPressTimer.current = setTimeout(() => {
@@ -152,24 +159,39 @@ export function TaskItem({
         <button
           type="button"
           role="checkbox"
-          aria-checked={isDone}
-          aria-label={isDone ? "Возобновить задачу" : "Выполнить задачу"}
+          aria-checked={selectMode ? selected : isDone}
+          aria-label={selectMode ? (selected ? "Убрать из выбора" : "Выбрать задачу") : isDone ? "Возобновить задачу" : "Выполнить задачу"}
           onClick={(e) => {
             e.preventDefault();
+            if (selectMode) {
+              haptics.selection();
+              onSelectToggle?.(task);
+              return;
+            }
             haptics.success();
             onToggle?.(task);
           }}
-          className={`flex h-11 w-11 shrink-0 items-center justify-center ${!onToggle ? "pointer-events-none" : ""}`}
+          className={`flex h-11 w-11 shrink-0 items-center justify-center ${!onToggle && !selectMode ? "pointer-events-none" : ""}`}
         >
-          <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${isDone ? "border-success bg-success" : "border-border-subtle"}`}>
-            {isDone && <Check size={14} strokeWidth={3} className="text-white" />}
+          <span
+            className={`flex h-6 w-6 items-center justify-center rounded-full border-2 transition-colors duration-150 ${
+              selectMode ? (selected ? "border-accent bg-accent" : "border-border-subtle") : isDone ? "border-success bg-success" : "border-border-subtle"
+            } ${selectMode ? "rounded-md" : ""}`}
+          >
+            {(selectMode ? selected : isDone) && <Check size={14} strokeWidth={3} className="text-white" />}
           </span>
         </button>
 
         <Link
           to={`/tasks/${task.id}`}
           onClick={(e) => {
-            if (suppressClick.current) e.preventDefault();
+            if (suppressClick.current || selectMode) {
+              e.preventDefault();
+              if (selectMode) {
+                haptics.selection();
+                onSelectToggle?.(task);
+              }
+            }
           }}
           className="min-w-0 flex-1 py-0.5"
         >
