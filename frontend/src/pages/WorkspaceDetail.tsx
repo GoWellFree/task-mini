@@ -7,7 +7,7 @@ import { Loading, ErrorMessage } from "../components/Feedback";
 import { EmptyState } from "../components/ui/EmptyState";
 import { SegmentedControl } from "../components/ui/SegmentedControl";
 import { SearchInput } from "../components/ui/SearchInput";
-import { PriorityBadge } from "../components/ui/PriorityBadge";
+import { PriorityBadge, PRIORITY_DISPLAY } from "../components/ui/PriorityBadge";
 import { IconButton } from "../components/ui/IconButton";
 import { ActionSheet, type ActionSheetItem } from "../components/ui/ActionSheet";
 import { BottomSheet } from "../components/ui/BottomSheet";
@@ -15,9 +15,8 @@ import { TaskItem } from "../components/tasks/TaskItem";
 import { TeamPanel } from "../components/team/TeamPanel";
 import { useQuickAdd } from "../lib/QuickAddContext";
 import { useToast } from "../components/ui/Toast";
-import { PRIORITY_LABELS, STATUS_LABELS } from "../components/TaskBits";
 import type { Label, Project, Task, TaskPriority, TaskStatus, Workspace, WorkspaceMemberWithUser } from "../types";
-import { TASK_PRIORITY_VALUES, TASK_STATUS_VALUES } from "../types";
+import { TASK_PRIORITY_VALUES } from "../types";
 
 interface Filters {
   status: TaskStatus | "";
@@ -68,7 +67,7 @@ export function WorkspaceDetail() {
       setProjects(projectsRes.projects);
       setLabels(labelsRes.labels);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось загрузить группу");
+      setError(err instanceof ApiError ? err.message : "Не удалось загрузить проект");
     }
   }
 
@@ -138,8 +137,8 @@ export function WorkspaceDetail() {
 
   const hasActiveFilters = Object.values(filters).some(Boolean);
 
-  if (error) return <PageLayout title="Группа" onBack><ErrorMessage message={error} onRetry={loadWorkspace} /></PageLayout>;
-  if (!workspace || !members || !tasks) return <PageLayout title="Группа" onBack><Loading /></PageLayout>;
+  if (error) return <PageLayout title="Проект" onBack><ErrorMessage message={error} onRetry={loadWorkspace} /></PageLayout>;
+  if (!workspace || !members || !tasks) return <PageLayout title="Проект" onBack><Loading /></PageLayout>;
 
   const grouped = BOARD_COLUMNS.map((col) => ({ ...col, tasks: tasks.filter((t) => t.status === col.status) }));
   const otherStatusTasks = tasks.filter((t) => !BOARD_COLUMNS.some((c) => c.status === t.status));
@@ -249,11 +248,12 @@ export function WorkspaceDetail() {
         <div className="flex flex-col gap-3">
           <FilterSelect label="Статус" value={filters.status} onChange={(v) => setFilters((f) => ({ ...f, status: v as TaskStatus | "" }))}>
             <option value="">Любой статус</option>
-            {TASK_STATUS_VALUES.map((s) => <option key={s} value={s}>{STATUS_LABELS[s]}</option>)}
+            {BOARD_COLUMNS.map((c) => <option key={c.status} value={c.status}>{c.label}</option>)}
           </FilterSelect>
           <FilterSelect label="Приоритет" value={filters.priority} onChange={(v) => setFilters((f) => ({ ...f, priority: v as TaskPriority | "" }))}>
             <option value="">Любой приоритет</option>
-            {TASK_PRIORITY_VALUES.map((p) => <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>)}
+            <option value="none">Без приоритета</option>
+            {TASK_PRIORITY_VALUES.filter((p) => p !== "none").map((p) => <option key={p} value={p}>{PRIORITY_DISPLAY[p].label}</option>)}
           </FilterSelect>
           {projects.length > 0 && (
             <FilterSelect label="Проект" value={filters.projectId} onChange={(v) => setFilters((f) => ({ ...f, projectId: v }))}>

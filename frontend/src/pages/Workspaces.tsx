@@ -51,7 +51,7 @@ export function Workspaces() {
       );
       setSummaries(withSummary);
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Не удалось загрузить группы");
+      setError(err instanceof ApiError ? err.message : "Не удалось загрузить проекты");
     }
   }
 
@@ -69,7 +69,7 @@ export function Workspaces() {
       setCreating(false);
       await load();
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Не удалось создать группу");
+      setFormError(err instanceof ApiError ? err.message : "Не удалось создать проект");
     } finally {
       setSubmitting(false);
     }
