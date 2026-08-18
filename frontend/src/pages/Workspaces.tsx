@@ -11,6 +11,7 @@ import { Button } from "../components/ui/Button";
 import { BottomSheet } from "../components/ui/BottomSheet";
 import { Input } from "../components/ui/Input";
 import { ErrorMessage } from "../components/Feedback";
+import { pluralTasks } from "../lib/pluralize";
 import type { Task, Workspace, WorkspaceMemberWithUser } from "../types";
 
 interface WorkspaceSummary {
@@ -140,7 +141,7 @@ function ProjectCard({ summary }: { summary: WorkspaceSummary }) {
         {total > 0 ? (
           <>
             <p className="mt-2 text-sm text-content-secondary">
-              {total} {total === 1 ? "задача" : "задач"} · {done} выполнено
+              {total} {pluralTasks(total)} · {done} выполнено
             </p>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-pill bg-surface-secondary">
               <div className="h-full rounded-pill bg-accent transition-[width] duration-300" style={{ width: `${progress}%` }} />

@@ -15,6 +15,7 @@ import { TaskItem } from "../components/tasks/TaskItem";
 import { TeamPanel } from "../components/team/TeamPanel";
 import { useQuickAdd } from "../lib/QuickAddContext";
 import { useToast } from "../components/ui/Toast";
+import { pluralMembers, pluralTasks } from "../lib/pluralize";
 import type { Label, Project, Task, TaskPriority, TaskStatus, Workspace, WorkspaceMemberWithUser } from "../types";
 import { TASK_PRIORITY_VALUES } from "../types";
 
@@ -156,7 +157,7 @@ export function WorkspaceDetail() {
       }
     >
       <p className="mb-3 text-sm text-content-tertiary">
-        {tasks.length} {tasks.length === 1 ? "задача" : "задач"} · {members.length} {members.length === 1 ? "участник" : "участников"}
+        {tasks.length} {pluralTasks(tasks.length)} · {members.length} {pluralMembers(members.length)}
       </p>
 
       <div className="mb-4 flex items-center justify-between gap-2">
@@ -256,8 +257,13 @@ export function WorkspaceDetail() {
             {TASK_PRIORITY_VALUES.filter((p) => p !== "none").map((p) => <option key={p} value={p}>{PRIORITY_DISPLAY[p].label}</option>)}
           </FilterSelect>
           {projects.length > 0 && (
-            <FilterSelect label="Проект" value={filters.projectId} onChange={(v) => setFilters((f) => ({ ...f, projectId: v }))}>
-              <option value="">Любой проект</option>
+            // Labeled "Подпроект", not "Проект" — this workspace-detail screen
+            // (and its nav tab) already calls the *workspace* itself "Проект"
+            // throughout the app; this filter is for the separate, nested
+            // Project sub-entity, so reusing the same word here would collide
+            // with that established meaning.
+            <FilterSelect label="Подпроект" value={filters.projectId} onChange={(v) => setFilters((f) => ({ ...f, projectId: v }))}>
+              <option value="">Любой подпроект</option>
               {projects.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </FilterSelect>
           )}

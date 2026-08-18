@@ -14,6 +14,7 @@ import { DatePicker } from "../components/ui/DatePicker";
 import { PRIORITY_DISPLAY } from "../components/ui/PriorityBadge";
 import { useToast } from "../components/ui/Toast";
 import { haptics } from "../lib/haptics";
+import { pluralTasks } from "../lib/pluralize";
 import type { Task, TaskPriority, TaskWithWorkspace } from "../types";
 
 type SmartFilter = "all" | "today" | "upcoming" | "overdue" | "done";
@@ -129,22 +130,29 @@ export function MyTasks() {
 
   const selectedTasks = useMemo(() => (filtered ?? []).filter((t) => selectedIds.has(t.id)), [filtered, selectedIds]);
 
-  /** Fans out to the existing single-task endpoints (no new backend surface) and reports partial failures rather than swallowing them. */
+  /**
+   * Fans out to the existing single-task endpoints (no new backend surface).
+   * On full success the selection clears with a plain confirmation; on any
+   * failure the selection narrows to just the failed tasks (instead of
+   * clearing) so the user can immediately retry rather than having to
+   * reopen the list and guess which ones didn't go through.
+   */
   async function runBulk(label: string, run: (task: TaskWithWorkspace) => Promise<void>) {
     if (selectedTasks.length === 0) return;
     setBulkBusy(true);
     const results = await Promise.allSettled(selectedTasks.map(run));
     setBulkBusy(false);
-    const failed = results.filter((r) => r.status === "rejected").length;
-    const succeeded = results.length - failed;
-    if (failed === 0) {
+    const failedTasks = selectedTasks.filter((_, i) => results[i]!.status === "rejected");
+    const succeeded = results.length - failedTasks.length;
+    if (failedTasks.length === 0) {
       haptics.success();
-      showToast(`${label}: ${succeeded} из ${results.length}`, { tone: "success" });
+      showToast(`${label}: ${succeeded} ${pluralTasks(succeeded)}`, { tone: "success" });
+      exitSelectMode();
     } else {
       haptics.error();
-      showToast(`${label}: ${succeeded} из ${results.length}, ${failed} с ошибкой`, { tone: succeeded > 0 ? "success" : "error" });
+      showToast(`${label}: ${succeeded} из ${results.length}, ${failedTasks.length} с ошибкой`, { tone: succeeded > 0 ? "success" : "error" });
+      setSelectedIds(new Set(failedTasks.map((t) => t.id)));
     }
-    exitSelectMode();
     await load();
   }
 
@@ -245,7 +253,7 @@ export function MyTasks() {
               <X size={20} />
             </button>
             <span className="min-w-0 flex-1 truncate px-1 text-sm font-medium text-content-secondary">{selectedIds.size} выбрано</span>
-            <BulkBarButton icon={<Check size={18} />} label="Готово" disabled={selectedIds.size === 0 || bulkBusy} onClick={bulkComplete} />
+            <BulkBarButton icon={<Check size={18} />} label="Выполнить" disabled={selectedIds.size === 0 || bulkBusy} onClick={bulkComplete} />
             <BulkBarButton icon={<Calendar size={18} />} label="Срок" disabled={selectedIds.size === 0 || bulkBusy} onClick={() => setBulkRescheduleOpen(true)} />
             <BulkBarButton icon={<Flag size={18} />} label="Приоритет" disabled={selectedIds.size === 0 || bulkBusy} onClick={() => setBulkPriorityOpen(true)} />
             <BulkBarButton icon={<Trash2 size={18} />} label="Удалить" tone="danger" disabled={selectedIds.size === 0 || bulkBusy} onClick={() => setConfirmingBulkDelete(true)} />
@@ -256,7 +264,7 @@ export function MyTasks() {
       <ActionSheet
         open={confirmingBulkDelete}
         onClose={() => setConfirmingBulkDelete(false)}
-        title={`Удалить ${selectedIds.size} ${selectedIds.size === 1 ? "задачу" : "задач"}? Это действие необратимо.`}
+        title={`Удалить ${selectedIds.size} ${selectedIds.size === 1 ? "задачу" : pluralTasks(selectedIds.size)}? Это действие необратимо.`}
         items={[{ label: "Удалить", tone: "danger", onSelect: bulkDelete }]}
       />
       <ActionSheet open={bulkPriorityOpen} onClose={() => setBulkPriorityOpen(false)} title="Приоритет" items={priorityItems} />
