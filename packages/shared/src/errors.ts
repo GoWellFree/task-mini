@@ -30,6 +30,9 @@ export const ERROR_CODES = {
   DEPENDENCY_CYCLE: "DEPENDENCY_CYCLE",
   DEPENDENCY_CROSS_WORKSPACE: "DEPENDENCY_CROSS_WORKSPACE",
   TASK_BLOCKED_BY_DEPENDENCIES: "TASK_BLOCKED_BY_DEPENDENCIES",
+  ATTACHMENT_NOT_FOUND: "ATTACHMENT_NOT_FOUND",
+  ATTACHMENT_TOO_LARGE: "ATTACHMENT_TOO_LARGE",
+  ATTACHMENT_MISSING: "ATTACHMENT_MISSING",
 } as const;
 
 export type ErrorCode = (typeof ERROR_CODES)[keyof typeof ERROR_CODES];
@@ -75,6 +78,9 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   DEPENDENCY_CYCLE: "Это создаст циклическую зависимость между задачами",
   DEPENDENCY_CROSS_WORKSPACE: "Зависимость можно добавить только между задачами одной группы",
   TASK_BLOCKED_BY_DEPENDENCIES: "Сначала выполните задачи, от которых зависит эта",
+  ATTACHMENT_NOT_FOUND: "Файл не найден",
+  ATTACHMENT_TOO_LARGE: "Файл слишком большой (максимум 15 МБ)",
+  ATTACHMENT_MISSING: "Выберите файл для загрузки",
 };
 
 export const ERROR_STATUS: Record<ErrorCode, number> = {
@@ -108,4 +114,7 @@ export const ERROR_STATUS: Record<ErrorCode, number> = {
   DEPENDENCY_CYCLE: 409,
   DEPENDENCY_CROSS_WORKSPACE: 400,
   TASK_BLOCKED_BY_DEPENDENCIES: 409,
+  ATTACHMENT_NOT_FOUND: 404,
+  ATTACHMENT_TOO_LARGE: 400,
+  ATTACHMENT_MISSING: 400,
 };

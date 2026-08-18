@@ -241,3 +241,4 @@ export const taskLabelParamSchema = z.object({ id: uuid, labelId: uuid });
 export const taskChecklistItemParamSchema = z.object({ id: uuid, itemId: uuid });
 export const taskCommentParamSchema = z.object({ id: uuid, commentId: uuid });
 export const taskDependencyParamSchema = z.object({ id: uuid, dependsOnTaskId: uuid });
+export const taskAttachmentParamSchema = z.object({ id: uuid, attachmentId: uuid });

@@ -1,4 +1,5 @@
-import { Router } from "express";
+import { Router, type RequestHandler } from "express";
+import multer from "multer";
 import {
   ERROR_CODES,
   addAssigneeSchema,
@@ -8,6 +9,7 @@ import {
   createCommentSchema,
   createTaskSchema,
   taskAssigneeParamSchema,
+  taskAttachmentParamSchema,
   taskChecklistItemParamSchema,
   taskCommentParamSchema,
   taskDependencyParamSchema,
@@ -55,11 +57,13 @@ import { getLabelById } from "../repositories/labelRepository.js";
 import * as checklistItemRepository from "../repositories/checklistItemRepository.js";
 import * as taskCommentRepository from "../repositories/taskCommentRepository.js";
 import * as taskDependencyRepository from "../repositories/taskDependencyRepository.js";
+import * as taskAttachmentRepository from "../repositories/taskAttachmentRepository.js";
 import { getProjectById } from "../repositories/projectRepository.js";
 import { findUserById } from "../repositories/userRepository.js";
 import { getWorkspaceById } from "../repositories/workspaceRepository.js";
 import * as reminderRepository from "../repositories/reminderRepository.js";
 import * as taskAssignmentService from "../services/taskAssignmentService.js";
+import * as attachmentService from "../services/attachmentService.js";
 import { applyRecurrenceOnCompletion } from "../services/recurrenceService.js";
 import { notifyTaskAssigned } from "../lib/bot.js";
 import type { Task } from "../types/index.js";
@@ -655,6 +659,100 @@ tasksRouter.delete(
     const { dependsOnTaskId } = req.params as { dependsOnTaskId: string };
     await taskDependencyRepository.removeDependency(task.id, dependsOnTaskId);
 
+    res.status(204).send();
+  }),
+);
+
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: MAX_ATTACHMENT_BYTES } });
+
+/** Multer is callback-style; adapt it to the async/await flow the rest of this file uses. */
+function receiveUpload(req: Parameters<RequestHandler>[0], res: Parameters<RequestHandler>[1]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    upload.single("file")(req, res, (err: unknown) => {
+      if (!err) {
+        resolve();
+        return;
+      }
+      if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+        reject(new ApiError(ERROR_CODES.ATTACHMENT_TOO_LARGE));
+      } else {
+        reject(err);
+      }
+    });
+  });
+}
+
+// GET /api/tasks/:id/attachments
+tasksRouter.get(
+  "/:id/attachments",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const attachments = await taskAttachmentRepository.listForTask(task.id);
+    res.json({ attachments });
+  }),
+);
+
+// POST /api/tasks/:id/attachments — any contributor may attach a file to a task they can see.
+tasksRouter.post(
+  "/:id/attachments",
+  validateParams(uuidParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireContributor(task.workspace_id, req.user!.id);
+
+    await receiveUpload(req, res);
+    if (!req.file) {
+      throw new ApiError(ERROR_CODES.ATTACHMENT_MISSING);
+    }
+
+    const attachment = await attachmentService.uploadAttachment(task.id, req.user!.id, req.file);
+    res.status(201).json({ attachment });
+  }),
+);
+
+// GET /api/tasks/:id/attachments/:attachmentId/download — short-lived signed URL, never a public link.
+tasksRouter.get(
+  "/:id/attachments/:attachmentId/download",
+  validateParams(taskAttachmentParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const { attachmentId } = req.params as { attachmentId: string };
+    const attachment = await taskAttachmentRepository.getById(attachmentId);
+    if (!attachment || attachment.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.ATTACHMENT_NOT_FOUND);
+    }
+
+    const url = await attachmentService.getDownloadUrl(attachment);
+    res.json({ url });
+  }),
+);
+
+// DELETE /api/tasks/:id/attachments/:attachmentId — the uploader, or a task
+// manager moderating their workspace, may remove an attachment.
+tasksRouter.delete(
+  "/:id/attachments/:attachmentId",
+  validateParams(taskAttachmentParamSchema),
+  asyncHandler(async (req, res) => {
+    const task = await getTaskOrThrow(req.params.id as string);
+    await requireMembership(task.workspace_id, req.user!.id);
+
+    const { attachmentId } = req.params as { attachmentId: string };
+    const attachment = await taskAttachmentRepository.getById(attachmentId);
+    if (!attachment || attachment.task_id !== task.id) {
+      throw new ApiError(ERROR_CODES.ATTACHMENT_NOT_FOUND);
+    }
+
+    if (attachment.uploader_id !== req.user!.id) {
+      await requireTaskManager(task, req.user!.id);
+    }
+
+    await attachmentService.deleteAttachment(attachment);
     res.status(204).send();
   }),
 );

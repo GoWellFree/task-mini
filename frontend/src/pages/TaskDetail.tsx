@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { Check, MoreHorizontal, Plus, X } from "lucide-react";
+import { Check, Download, MoreHorizontal, Paperclip, Plus, X } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { useAuth } from "../lib/AuthContext";
 import { PageLayout } from "../components/PageLayout";
@@ -20,12 +20,21 @@ import type {
   ChecklistItem,
   Label,
   Task,
+  TaskAttachmentWithUploader,
   TaskComment,
   TaskCommentWithAuthor,
   TaskPriority,
   TaskStatus,
   WorkspaceMemberWithUser,
 } from "../types";
+
+const MAX_ATTACHMENT_BYTES = 15 * 1024 * 1024;
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} Б`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} КБ`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} МБ`;
+}
 
 const STATUS_CYCLE: TaskStatus[] = ["todo", "in_progress", "done"];
 const STATUS_LABELS_CYCLE: Record<string, string> = { todo: "К выполнению", in_progress: "В работе", done: "Выполнено" };
@@ -60,6 +69,8 @@ export function TaskDetail() {
   const [dependsOn, setDependsOn] = useState<DependencyTaskInfo[]>([]);
   const [blocks, setBlocks] = useState<DependencyTaskInfo[]>([]);
   const [workspaceTasks, setWorkspaceTasks] = useState<Task[]>([]);
+  const [attachments, setAttachments] = useState<TaskAttachmentWithUploader[]>([]);
+  const [uploadingAttachment, setUploadingAttachment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -74,7 +85,7 @@ export function TaskDetail() {
     try {
       const res = await api.get<{ task: Task }>(`/api/tasks/${id}`);
       setTask(res.task);
-      const [membersRes, labelsRes, workspaceLabelsRes, checklistRes, commentsRes, dependenciesRes, workspaceTasksRes] =
+      const [membersRes, labelsRes, workspaceLabelsRes, checklistRes, commentsRes, dependenciesRes, workspaceTasksRes, attachmentsRes] =
         await Promise.all([
           api.get<{ members: WorkspaceMemberWithUser[] }>(`/api/workspaces/${res.task.workspace_id}/members`),
           api.get<{ labels: Label[] }>(`/api/tasks/${id}/labels`),
@@ -83,6 +94,7 @@ export function TaskDetail() {
           api.get<{ comments: TaskCommentWithAuthor[] }>(`/api/tasks/${id}/comments`),
           api.get<{ dependsOn: DependencyTaskInfo[]; blocks: DependencyTaskInfo[] }>(`/api/tasks/${id}/dependencies`),
           api.get<{ tasks: Task[] }>(`/api/workspaces/${res.task.workspace_id}/tasks`),
+          api.get<{ attachments: TaskAttachmentWithUploader[] }>(`/api/tasks/${id}/attachments`),
         ]);
       setMembers(membersRes.members);
       setLabels(labelsRes.labels);
@@ -92,6 +104,7 @@ export function TaskDetail() {
       setDependsOn(dependenciesRes.dependsOn);
       setBlocks(dependenciesRes.blocks);
       setWorkspaceTasks(workspaceTasksRes.tasks);
+      setAttachments(attachmentsRes.attachments);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Не удалось загрузить задачу");
     }
@@ -271,6 +284,44 @@ export function TaskDetail() {
     }
   }
 
+  // --- attachments ---
+  async function uploadAttachment(file: File) {
+    if (!task) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      showToast("Файл слишком большой (максимум 15 МБ)", { tone: "error" });
+      return;
+    }
+    setUploadingAttachment(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await api.upload<{ attachment: TaskAttachmentWithUploader }>(`/api/tasks/${task.id}/attachments`, formData);
+      setAttachments((prev) => [...prev, res.attachment]);
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Не удалось загрузить файл", { tone: "error" });
+    } finally {
+      setUploadingAttachment(false);
+    }
+  }
+  async function downloadAttachment(attachmentId: string) {
+    if (!task) return;
+    try {
+      const res = await api.get<{ url: string }>(`/api/tasks/${task.id}/attachments/${attachmentId}/download`);
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Не удалось открыть файл", { tone: "error" });
+    }
+  }
+  async function deleteAttachment(attachmentId: string) {
+    if (!task) return;
+    try {
+      await api.delete(`/api/tasks/${task.id}/attachments/${attachmentId}`);
+      setAttachments((prev) => prev.filter((a) => a.id !== attachmentId));
+    } catch (err) {
+      showToast(err instanceof ApiError ? err.message : "Не удалось удалить файл", { tone: "error" });
+    }
+  }
+
   if (error) return <PageLayout title="Задача" onBack><ErrorMessage message={error} onRetry={load} /></PageLayout>;
   if (!task) return <PageLayout title="Задача" onBack><Loading /></PageLayout>;
 
@@ -377,6 +428,16 @@ export function TaskDetail() {
 
       <LabelsSection labels={labels} unattachedLabels={unattachedLabels} canManage={isManager} onAttach={attachLabel} onDetach={detachLabel} onCreate={createAndAttachLabel} />
       <ChecklistSection items={checklist} canManage={isManager} canToggle={canToggleChecklist} onAdd={addChecklistItem} onToggle={toggleChecklistItem} onDelete={deleteChecklistItem} />
+      <AttachmentsSection
+        attachments={attachments}
+        currentUserId={user?.id}
+        canUpload={!isViewer}
+        canManage={isManager}
+        uploading={uploadingAttachment}
+        onUpload={uploadAttachment}
+        onDownload={downloadAttachment}
+        onDelete={deleteAttachment}
+      />
       <DependenciesSection dependsOn={dependsOn} blocks={blocks} candidates={dependencyCandidates} canManage={isManager} onAdd={addDependency} onRemove={removeDependency} />
       <CommentsSection comments={comments} currentUserId={user?.id} canComment={!isViewer} canModerate={isManager} onAdd={addComment} onEdit={editComment} onDelete={deleteComment} />
 
@@ -518,6 +579,72 @@ function ChecklistSection({
             Добавить
           </button>
         </div>
+      )}
+    </div>
+  );
+}
+
+function AttachmentsSection({
+  attachments, currentUserId, canUpload, canManage, uploading, onUpload, onDownload, onDelete,
+}: {
+  attachments: TaskAttachmentWithUploader[]; currentUserId: string | undefined; canUpload: boolean; canManage: boolean;
+  uploading: boolean; onUpload: (file: File) => void; onDownload: (attachmentId: string) => void; onDelete: (attachmentId: string) => void;
+}) {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="mt-5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-[13px] font-semibold uppercase tracking-wide text-content-secondary">Вложения</h3>
+        {attachments.length > 0 && <span className="text-xs text-content-tertiary">{attachments.length}</span>}
+      </div>
+
+      <div className="mt-2 flex flex-col divide-y divide-border-subtle">
+        {attachments.map((a) => (
+          <div key={a.id} className="flex items-center gap-2.5 py-2">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface-secondary text-content-secondary">
+              <Paperclip size={16} />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm text-content-primary">{a.file_name}</p>
+              <p className="truncate text-xs text-content-tertiary">
+                {formatFileSize(a.file_size)} · {a.uploader.first_name}
+              </p>
+            </div>
+            <button onClick={() => onDownload(a.id)} className="shrink-0 p-1.5 text-content-secondary" aria-label={`Скачать ${a.file_name}`}>
+              <Download size={16} />
+            </button>
+            {(canManage || a.uploader_id === currentUserId) && (
+              <button onClick={() => onDelete(a.id)} className="shrink-0 p-1.5 text-content-tertiary" aria-label={`Удалить ${a.file_name}`}>
+                <X size={14} />
+              </button>
+            )}
+          </div>
+        ))}
+        {attachments.length === 0 && <p className="py-2 text-sm text-content-tertiary">Файлов пока нет</p>}
+      </div>
+
+      {canUpload && (
+        <>
+          <input
+            ref={fileInputRef}
+            type="file"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) onUpload(file);
+              e.target.value = "";
+            }}
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="mt-2 flex h-10 w-full items-center justify-center gap-1.5 rounded-lg border border-border-subtle bg-surface-primary text-sm font-medium text-content-primary disabled:opacity-50"
+          >
+            <Paperclip size={15} />
+            {uploading ? "Загрузка..." : "Прикрепить файл"}
+          </button>
+        </>
       )}
     </div>
   );

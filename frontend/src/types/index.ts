@@ -10,6 +10,8 @@ export type {
   RecurrenceRule,
   Task,
   TaskAssigneeWithUser,
+  TaskAttachment,
+  TaskAttachmentWithUploader,
   TaskComment,
   TaskCommentWithAuthor,
   TaskPriority,

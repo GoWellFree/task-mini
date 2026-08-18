@@ -10,6 +10,8 @@ export type {
   Task,
   TaskAssignee,
   TaskAssigneeWithUser,
+  TaskAttachment,
+  TaskAttachmentWithUploader,
   TaskComment,
   TaskCommentWithAuthor,
   TaskReminder,

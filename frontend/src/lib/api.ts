@@ -158,7 +158,9 @@ function ensureRecovered(): Promise<boolean> {
 async function send(path: string, options: RequestInit): Promise<Response> {
   const token = getToken();
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
+    // FormData bodies must NOT get an explicit Content-Type: the browser
+    // sets one itself with the multipart boundary, which we can't reproduce.
+    ...(options.body instanceof FormData ? {} : { "Content-Type": "application/json" }),
     ...(options.headers as Record<string, string> | undefined),
   };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -209,4 +211,5 @@ export const api = {
   patch: <T>(path: string, data?: unknown) =>
     request<T>(path, { method: "PATCH", body: data ? JSON.stringify(data) : undefined }),
   delete: <T>(path: string) => request<T>(path, { method: "DELETE" }),
+  upload: <T>(path: string, formData: FormData) => request<T>(path, { method: "POST", body: formData }),
 };

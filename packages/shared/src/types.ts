@@ -180,6 +180,21 @@ export interface TaskCommentWithAuthor extends TaskComment {
   author: PublicUser;
 }
 
+export interface TaskAttachment {
+  id: string;
+  task_id: string;
+  uploader_id: string;
+  file_name: string;
+  file_size: number;
+  mime_type: string;
+  storage_path: string;
+  created_at: string;
+}
+
+export interface TaskAttachmentWithUploader extends TaskAttachment {
+  uploader: PublicUser;
+}
+
 export interface AuthTokenPayload {
   userId: string;
   telegramId: number;
