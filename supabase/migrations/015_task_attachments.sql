@@ -17,6 +17,18 @@ create table if not exists task_attachments (
 
 create index if not exists idx_task_attachments_task_id on task_attachments(task_id);
 
-insert into storage.buckets (id, name, public)
-values ('task-attachments', 'task-attachments', false)
-on conflict (id) do nothing;
+-- storage.buckets only exists on real Supabase projects (it's part of the
+-- Storage extension's own schema), not on the plain postgres:16 container
+-- CI replays every migration against — guard it so this migration stays
+-- valid there too, same as it is against the real database.
+do $$
+begin
+  if exists (
+    select 1 from information_schema.tables
+    where table_schema = 'storage' and table_name = 'buckets'
+  ) then
+    insert into storage.buckets (id, name, public)
+    values ('task-attachments', 'task-attachments', false)
+    on conflict (id) do nothing;
+  end if;
+end $$;
